@@ -1,0 +1,2203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Squishy Butter</title>
+<style>
+  :root {
+    --ink: #3b3731;
+    --muted: #8b8478;
+    --panel: rgba(255, 253, 249, 0.9);
+    --line: rgba(70, 55, 30, 0.13);
+    --btn: #f4f0e8;
+    --btn-hover: #ece6da;
+    --btn-active: #e2dacb;
+    --accent: #cf9a33;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #ebe7df; color: var(--ink);
+    font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  #panel {
+    position: fixed; top: 14px; left: 14px; width: 238px; z-index: 2;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(60, 45, 20, 0.10), 0 1px 3px rgba(60, 45, 20, 0.08);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    max-height: calc(100% - 28px); overflow: auto;
+  }
+  #panel .head { display: flex; align-items: center; justify-content: space-between; padding: 9px 9px 9px 14px; font-weight: 600; }
+  #panel .title { display: flex; align-items: center; gap: 9px; }
+  #panel .logo {
+    width: 19px; height: 13px; border-radius: 5px; background: linear-gradient(#fce48f, #efc24c);
+    box-shadow: inset 0 -1.5px 0 rgba(180, 120, 20, .35), 0 0 0 1px rgba(180, 120, 20, .4);
+  }
+  .icon-btn {
+    width: 26px; height: 26px; border: none; border-radius: 8px; background: transparent; color: var(--muted);
+    font: 600 15px/1 system-ui, sans-serif; cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--btn-hover); color: var(--ink); }
+  #panel .body { padding: 0 12px 12px; }
+  #panel.collapsed .body { display: none; }
+  .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin: 8px 2px 6px; font-weight: 650; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  button.b {
+    appearance: none; border: 1px solid var(--line); background: var(--btn); color: var(--ink);
+    border-radius: 9px; padding: 7px 8px; font: inherit; cursor: pointer; display: flex; align-items: center;
+    gap: 7px; justify-content: flex-start; transition: background .12s, transform .06s; touch-action: none; white-space: nowrap;
+  }
+  button.b:hover { background: var(--btn-hover); }
+  button.b:active { background: var(--btn-active); transform: translateY(1px); }
+  button:focus { outline: none; }
+  button:focus-visible { outline: 2px solid rgba(207, 154, 51, 0.7); outline-offset: 1px; }
+  button.b.center { justify-content: center; }
+  button.b.muted { color: var(--muted); justify-content: center; }
+  .sw { width: 14px; height: 14px; border-radius: 50%; flex: none; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .14), 0 0 0 1px rgba(0, 0, 0, .12); }
+  .sw-small { background: #6f9be0; }
+  .sw-metal { background: radial-gradient(circle at 35% 30%, #f6f7f9, #9aa1ab 55%, #555c66); }
+  .sw-cube { border-radius: 3px; background: #e5866a; }
+  .sw-rubber { background: linear-gradient(#e2554d 0 36%, #f3e2c2 36% 64%, #e2554d 64%); }
+  .sw-hammer {
+    border-radius: 2px; box-shadow: none;
+    background: linear-gradient(90deg, transparent 0 38%, #b98451 38% 62%, transparent 62%) 0 5px / 100% 9px no-repeat,
+                linear-gradient(#6a727c, #6a727c) 0 0 / 100% 6px no-repeat;
+  }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--btn); border: 1px solid var(--line); border-radius: 9px; padding: 2px; gap: 2px; }
+  .seg button { border: none; background: transparent; border-radius: 7px; padding: 5px 0; font: inherit; color: var(--muted); cursor: pointer; }
+  .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(60, 45, 20, .16); }
+  .slider { display: grid; grid-template-columns: 1fr auto; align-items: center; margin: 5px 2px 1px; }
+  .slider output { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .slider input { grid-column: 1 / -1; width: 100%; margin: 3px 0 2px; accent-color: var(--accent); cursor: pointer; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .row .wide { grid-column: 1 / -1; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #c9c1b3; flex: none; }
+  .on > .dot { background: #79ad5f; }
+  #fps {
+    position: fixed; top: 12px; right: 14px; z-index: 2; pointer-events: none;
+    font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted);
+    background: rgba(255, 253, 249, .72); border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px;
+  }
+  #hint {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 1; pointer-events: none;
+    color: rgba(70, 60, 45, .75); font-size: 12.5px; background: rgba(255, 253, 249, .62);
+    border-radius: 999px; padding: 6px 14px; transition: opacity 1.2s; white-space: nowrap;
+  }
+  #hint.gone { opacity: 0; }
+  @media (max-width: 640px) {
+    #panel { width: 214px; top: 10px; left: 10px; }
+    #hint { white-space: normal; width: calc(100% - 32px); text-align: center; border-radius: 12px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div id="panel">
+  <div class="head">
+    <span class="title"><span class="logo"></span>Squishy Butter</span>
+    <button id="collapse" class="icon-btn" title="Hide / show panel (H)">–</button>
+  </div>
+  <div class="body">
+    <div class="label">Objects · click or drag out</div>
+    <div class="grid2">
+      <button class="b spawn" data-kind="small" title="Small ball (1)"><i class="sw sw-small"></i>Small ball</button>
+      <button class="b spawn" data-kind="metal" title="Heavy metal ball (2)"><i class="sw sw-metal"></i>Metal ball</button>
+      <button class="b spawn" data-kind="cube" title="Cube (3)"><i class="sw sw-cube"></i>Cube</button>
+      <button class="b spawn" data-kind="rubber" title="Rubber ball (4)"><i class="sw sw-rubber"></i>Rubber ball</button>
+      <button class="b spawn" data-kind="hammer" title="Hammer (5)"><i class="sw sw-hammer"></i>Hammer</button>
+      <button class="b muted" id="clearObjects" title="Remove all objects">Clear</button>
+    </div>
+
+    <div class="label">Grab mode</div>
+    <div class="seg" id="grabSeg">
+      <button data-mode="pinch" class="on" title="Grab the exact spot and stretch it">Pinch</button>
+      <button data-mode="whole" title="Grab the whole butter to fling it (or Shift / right-drag)">Whole</button>
+    </div>
+
+    <div class="label">Butter</div>
+    <label class="slider"><span>Softness</span><output id="softnessOut"></output>
+      <input type="range" id="softness" min="0" max="1" step="0.01" value="0.5"></label>
+    <label class="slider"><span>Elasticity</span><output id="elasticityOut"></output>
+      <input type="range" id="elasticity" min="0" max="1" step="0.01" value="0.6"></label>
+    <label class="slider"><span>Damping</span><output id="dampingOut"></output>
+      <input type="range" id="damping" min="0" max="1" step="0.01" value="0.4"></label>
+    <label class="slider"><span>Gravity</span><output id="gravityOut"></output>
+      <input type="range" id="gravity" min="200" max="4000" step="50" value="2000"></label>
+    <label class="slider"><span>Butter mass</span><output id="massOut"></output>
+      <input type="range" id="mass" min="0.5" max="10" step="0.1" value="3"></label>
+
+    <div class="row">
+      <button class="b center" id="resetBtn" title="Reset (R)">Reset</button>
+      <button class="b center on" id="gravityBtn" title="Toggle gravity (G)"><i class="dot"></i>Gravity</button>
+      <button class="b center wide" id="fullscreenBtn" title="Fullscreen (F)">Fullscreen</button>
+    </div>
+  </div>
+</div>
+
+<div id="fps">-- FPS</div>
+<div id="hint">Drag the butter to stretch it · Shift / right-drag grabs it whole · Drag empty space to poke</div>
+
+<script>
+(() => {
+'use strict';
+
+/* =========================================================================
+   1. PHYSICS
+   World, parameters, math helpers, rigid bodies and the generic XPBD
+   contact solver. Everything is simulated in "world units" (≈ CSS px at
+   scale 1) with a fixed time step split into small XPBD substeps.
+   ========================================================================= */
+
+const STEP_DT = 1 / 120;          // fixed physics step (s)
+const SUBSTEPS = 8;               // XPBD substeps per step → 960 Hz solver
+const MAX_STEPS_PER_FRAME = 5;    // avoid the spiral of death on slow frames
+const MAX_PARTICLE_SPEED = 6000;  // world units / s
+const MAX_BODY_SPEED = 5500;
+const MAX_BODY_SPIN = 45;         // rad / s
+const BOUNCE_MIN_SPEED = 70;      // slower impacts don't bounce (prevents jitter)
+const TAU = Math.PI * 2;
+
+const world = { w: 1000, h: 700, floorY: 640, scale: 1, dpr: 1 };
+const params = { softness: 0.5, elasticity: 0.6, damping: 0.4, gravity: 2000, mass: 3, gravityOn: true };
+const gravity = () => (params.gravityOn ? params.gravity : 0);
+
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// ---------- Rigid bodies (objects and the "finger" poker) ----------
+class Body {
+  constructor(kind, parts, mass, inertia, opts) {
+    this.kind = kind;
+    this.parts = parts;
+    this.m = mass; this.invM = mass > 0 ? 1 / mass : 0;
+    this.I = inertia; this.invI = inertia > 0 && isFinite(inertia) ? 1 / inertia : 0;
+    this.e = opts.restitution;            // bounciness
+    this.mu = opts.friction;              // friction coefficient
+    this.radius = opts.radius;            // bounding radius (broad phase)
+    this.comX = opts.comX || 0;           // COM offset in design coordinates (drawing)
+    this.comY = opts.comY || 0;
+    this.x = 0; this.y = 0; this.a = 0;   // pose
+    this.vx = 0; this.vy = 0; this.w = 0; // velocity
+    this.px = 0; this.py = 0; this.pa = 0; // pose at substep start
+    this.sx = 0; this.sy = 0; this.sa = 0; // pose at step start (render interpolation)
+    this.svx = 0; this.svy = 0;            // velocity at step start (impact detection)
+    this.held = false;
+    this.noGravity = false;
+  }
+  // Refresh world-space geometry caches after the pose changed.
+  updateWorld() {
+    const c = Math.cos(this.a), s = Math.sin(this.a), x = this.x, y = this.y;
+    for (const p of this.parts) {
+      if (p.type === 0) { p.wx = x + c * p.ox - s * p.oy; p.wy = y + s * p.ox + c * p.oy; continue; }
+      const lv = p.lv, wv = p.wv, ln = p.ln, wn = p.wn, ls = p.ls, ws = p.ws;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (let k = 0; k < lv.length; k += 2) {
+        const vx = x + c * lv[k] - s * lv[k + 1], vy = y + s * lv[k] + c * lv[k + 1];
+        wv[k] = vx; wv[k + 1] = vy;
+        wn[k] = c * ln[k] - s * ln[k + 1]; wn[k + 1] = s * ln[k] + c * ln[k + 1];
+        if (vx < minX) minX = vx; if (vx > maxX) maxX = vx;
+        if (vy < minY) minY = vy; if (vy > maxY) maxY = vy;
+      }
+      for (let k = 0; k < ls.length; k += 2) {
+        ws[k] = x + c * ls[k] - s * ls[k + 1]; ws[k + 1] = y + s * ls[k] + c * ls[k + 1];
+      }
+      p.minX = minX; p.minY = minY; p.maxX = maxX; p.maxY = maxY;
+    }
+  }
+}
+
+function circlePart(ox, oy, r) { return { type: 0, ox, oy, r, wx: 0, wy: 0 }; }
+
+// Convex polygon part. Vertices are ordered so the shoelace area is positive,
+// which makes (dy, -dx) the outward normal of every edge.
+function polyPart(verts) {
+  const n = verts.length / 2;
+  const lv = new Float64Array(verts), ln = new Float64Array(2 * n);
+  const samples = [];
+  for (let k = 0; k < n; k++) {
+    const j = (k + 1) % n;
+    const dx = lv[2 * j] - lv[2 * k], dy = lv[2 * j + 1] - lv[2 * k + 1], L = Math.hypot(dx, dy);
+    ln[2 * k] = dy / L; ln[2 * k + 1] = -dx / L;
+    // perimeter sample points, used to test the polygon against the butter outline
+    const m = Math.max(1, Math.ceil(L / 8));
+    for (let q = 0; q < m; q++) samples.push(lv[2 * k] + dx * q / m, lv[2 * k + 1] + dy * q / m);
+  }
+  const ls = new Float64Array(samples);
+  return { type: 1, n, lv, ln, ls, wv: new Float64Array(2 * n), wn: new Float64Array(2 * n),
+           ws: new Float64Array(ls.length), minX: 0, minY: 0, maxX: 0, maxY: 0 };
+}
+function boxPart(ox, oy, hw, hh) {
+  return polyPart([ox - hw, oy - hh, ox + hw, oy - hh, ox + hw, oy + hh, ox - hw, oy + hh]);
+}
+
+// Builds a (possibly compound) rigid body; parts are re-centred on the centre of mass.
+function buildBody(kind, spec, props) {
+  let M = 0, cx = 0, cy = 0;
+  for (const s of spec) { M += s.m; cx += s.x * s.m; cy += s.y * s.m; }
+  cx /= M; cy /= M;
+  let I = 0, rad = 0;
+  const parts = [];
+  for (const s of spec) {
+    const dx = s.x - cx, dy = s.y - cy, d2 = dx * dx + dy * dy;
+    if (s.shape === 'circle') {
+      I += s.m * (0.5 * s.r * s.r + d2);
+      parts.push(circlePart(dx, dy, s.r));
+      rad = Math.max(rad, Math.sqrt(d2) + s.r);
+    } else {
+      I += s.m * ((4 * s.hw * s.hw + 4 * s.hh * s.hh) / 12 + d2);
+      parts.push(boxPart(dx, dy, s.hw, s.hh));
+      rad = Math.max(rad, Math.sqrt(d2) + Math.hypot(s.hw, s.hh));
+    }
+  }
+  return new Body(kind, parts, M, props.noRotation ? Infinity : I,
+    { restitution: props.restitution, friction: props.friction, radius: rad, comX: cx, comY: cy });
+}
+
+// ---------- Generic XPBD contact solver ----------
+// A contact connects two "sides". A side can be the static world, a rigid body
+// (with a lever arm), a single butter particle, or a point on a butter outline
+// edge (two particles blended by t). This lets every collision type share the
+// same position solve, friction and restitution code.
+const K_STATIC = 0, K_BODY = 1, K_PART = 2, K_EDGE = 3;
+const newSide = () => ({ k: 0, b: null, i: 0, j: 0, t: 0, rx: 0, ry: 0 });
+const SA = newSide(), SB = newSide();
+let tmpX = 0, tmpY = 0;
+
+// butter particle arrays (allocated in section 2, used by the solver)
+let BX, BY, BPX, BPY, BVX, BVY, BW, BSX, BSY, RX, RY;
+
+function setStatic(s) { s.k = K_STATIC; s.b = null; }
+function setBody(s, b, px, py) { s.k = K_BODY; s.b = b; s.rx = px - b.x; s.ry = py - b.y; }
+function setParticle(s, i) { s.k = K_PART; s.i = i; }
+function setEdge(s, i, j, t) { s.k = K_EDGE; s.i = i; s.j = j; s.t = t; }
+
+function sideInvMass(s, nx, ny) {
+  switch (s.k) {
+    case K_BODY: { const b = s.b, rn = s.rx * ny - s.ry * nx; return b.invM + b.invI * rn * rn; }
+    case K_PART: return BW[s.i];
+    case K_EDGE: { const u = 1 - s.t; return BW[s.i] * u * u + BW[s.j] * s.t * s.t; }
+    default: return 0;
+  }
+}
+function sideMove(s, Px, Py) {           // apply a positional impulse
+  switch (s.k) {
+    case K_BODY: { const b = s.b; b.x += Px * b.invM; b.y += Py * b.invM; b.a += b.invI * (s.rx * Py - s.ry * Px); break; }
+    case K_PART: BX[s.i] += Px * BW[s.i]; BY[s.i] += Py * BW[s.i]; break;
+    case K_EDGE: {
+      const u = 1 - s.t, i = s.i, j = s.j;
+      BX[i] += Px * BW[i] * u; BY[i] += Py * BW[i] * u;
+      BX[j] += Px * BW[j] * s.t; BY[j] += Py * BW[j] * s.t;
+      break;
+    }
+  }
+}
+function sideDisp(s) {                   // displacement of the contact point during this substep
+  switch (s.k) {
+    case K_BODY: { const b = s.b, da = b.a - b.pa; tmpX = b.x - b.px - da * s.ry; tmpY = b.y - b.py + da * s.rx; break; }
+    case K_PART: tmpX = BX[s.i] - BPX[s.i]; tmpY = BY[s.i] - BPY[s.i]; break;
+    case K_EDGE: {
+      const u = 1 - s.t, i = s.i, j = s.j;
+      tmpX = u * (BX[i] - BPX[i]) + s.t * (BX[j] - BPX[j]);
+      tmpY = u * (BY[i] - BPY[i]) + s.t * (BY[j] - BPY[j]);
+      break;
+    }
+    default: tmpX = 0; tmpY = 0;
+  }
+}
+function sideVel(s) {
+  switch (s.k) {
+    case K_BODY: { const b = s.b; tmpX = b.vx - b.w * s.ry; tmpY = b.vy + b.w * s.rx; break; }
+    case K_PART: tmpX = BVX[s.i]; tmpY = BVY[s.i]; break;
+    case K_EDGE: { const u = 1 - s.t; tmpX = u * BVX[s.i] + s.t * BVX[s.j]; tmpY = u * BVY[s.i] + s.t * BVY[s.j]; break; }
+    default: tmpX = 0; tmpY = 0;
+  }
+}
+function sideImpulse(s, Jx, Jy) {        // apply a velocity impulse
+  switch (s.k) {
+    case K_BODY: { const b = s.b; b.vx += Jx * b.invM; b.vy += Jy * b.invM; b.w += b.invI * (s.rx * Jy - s.ry * Jx); break; }
+    case K_PART: BVX[s.i] += Jx * BW[s.i]; BVY[s.i] += Jy * BW[s.i]; break;
+    case K_EDGE: {
+      const u = 1 - s.t, i = s.i, j = s.j;
+      BVX[i] += Jx * BW[i] * u; BVY[i] += Jy * BW[i] * u;
+      BVX[j] += Jx * BW[j] * s.t; BVY[j] += Jy * BW[j] * s.t;
+      break;
+    }
+  }
+}
+
+// Impacting contacts are remembered so restitution can be applied after the
+// velocities have been derived from the corrected positions.
+const bounceRecs = [];
+let bounceCount = 0;
+function copySide(d, s) { d.k = s.k; d.b = s.b; d.i = s.i; d.j = s.j; d.t = s.t; d.rx = s.rx; d.ry = s.ry; }
+function recordBounce(nx, ny, vnPre, e) {
+  let r = bounceRecs[bounceCount];
+  if (!r) { r = { A: newSide(), B: newSide(), nx: 0, ny: 0, vnPre: 0, e: 0 }; bounceRecs.push(r); }
+  copySide(r.A, SA); copySide(r.B, SB);
+  r.nx = nx; r.ny = ny; r.vnPre = vnPre; r.e = e;
+  bounceCount++;
+}
+
+// Resolve a penetration `depth` along normal n (pointing from side A to side B).
+// Position-level static/kinetic friction is applied right after the normal push.
+function resolveContact(nx, ny, depth, muS, muK, e) {
+  const wA = sideInvMass(SA, nx, ny), wB = sideInvMass(SB, nx, ny), wSum = wA + wB;
+  if (wSum < 1e-12 || depth <= 0) return 0;
+  let vnPre = 0;
+  if (e > 0) { sideVel(SB); const bx = tmpX, by = tmpY; sideVel(SA); vnPre = (bx - tmpX) * nx + (by - tmpY) * ny; }
+  const dl = depth / wSum;
+  sideMove(SA, -nx * dl, -ny * dl);
+  sideMove(SB, nx * dl, ny * dl);
+  if (muS > 0) {
+    sideDisp(SB); let rx = tmpX, ry = tmpY;
+    sideDisp(SA); rx -= tmpX; ry -= tmpY;
+    const rn = rx * nx + ry * ny;
+    let tx = rx - rn * nx, ty = ry - rn * ny;
+    const tl = Math.sqrt(tx * tx + ty * ty);
+    if (tl > 1e-9) {
+      tx /= tl; ty /= tl;
+      const corr = tl < muS * depth ? tl : Math.min(muK * depth, tl);
+      const wt = sideInvMass(SA, tx, ty) + sideInvMass(SB, tx, ty);
+      if (wt > 1e-12) { const d = corr / wt; sideMove(SA, tx * d, ty * d); sideMove(SB, -tx * d, -ty * d); }
+    }
+  }
+  if (e > 0 && vnPre < -BOUNCE_MIN_SPEED) recordBounce(nx, ny, vnPre, e);
+  return dl;
+}
+
+// Velocity pass: give impacting contacts their restitution.
+function solveBounces() {
+  for (let k = 0; k < bounceCount; k++) {
+    const r = bounceRecs[k], nx = r.nx, ny = r.ny;
+    sideVel(r.B); const bx = tmpX, by = tmpY;
+    sideVel(r.A);
+    const vn = (bx - tmpX) * nx + (by - tmpY) * ny;
+    const target = -r.e * r.vnPre;
+    if (vn >= target) continue;
+    const W = sideInvMass(r.A, nx, ny) + sideInvMass(r.B, nx, ny);
+    if (W < 1e-12) continue;
+    const J = (target - vn) / W;
+    sideImpulse(r.A, -nx * J, -ny * J);
+    sideImpulse(r.B, nx * J, ny * J);
+  }
+  bounceCount = 0;
+}
+
+/* =========================================================================
+   2. SOFT-BODY SIMULATION
+   The butter is a triangulated particle mesh (Delaunay over a hex lattice)
+   solved with small-step XPBD:
+     • distance constraints on every mesh edge, plus softer shear springs and
+       outline bending springs, with smooth strain limiting and viscous damping
+     • per-triangle area constraints (local volume) that stiffen near collapse
+     • one global area constraint on the outline (pressure / volume)
+     • outline curvature memory (keeps the silhouette smooth, never polygonal)
+     • global shape matching toward a plastic rest shape (shape memory)
+   The plastic rest shape slowly creeps toward the current shape under
+   sustained load and slowly recovers, giving slow-rise squishy behaviour.
+   A watchdog detects tangles (inverted triangles / self-crossing outline)
+   and temporarily boosts shape memory until the mesh has unfolded.
+   ========================================================================= */
+
+const HALF_W = 165, HALF_H = 98, OUTLINE_EXP = 4.0;  // rest outline: a soft superellipse "pat" of butter
+const EDGE_SPACING = 15;                              // outline particle spacing
+const LATTICE = 19;                                   // interior particle spacing
+const MAX_PLASTIC = 45;                               // max plastic offset per particle
+const STICK_SQUASH = 0.14;                            // global squash level where the butter starts sticking to the floor
+const STICK_LOAD = 45;                                // … or local floor pressure (in particle weights)
+const STICK_RANGE = 11;                               // how far a stuck particle can be pulled before letting go
+const STICK_STRENGTH = 13;                            // adhesion per particle, in particle weights
+const STICK_DECAY = 0.7;                              // stickiness fades over time (1/s)
+
+const butter = {
+  n: 0, nb: 0, orient: 1,
+  restX: null, restY: null, plX: null, plY: null,
+  edges: null, edgeRest: null, edgeKind: null, ne: 0,
+  tris: null, triArea: null, nt: 0,
+  area0: 0, gradX: null, gradY: null,
+  aqqInv: [1, 0, 0, 1],
+  stick: null, onFloor: null,
+  cx: 0, cy: 0, angle: 0, squash: 0, vcx: 0, vcy: 0,
+  inverted: 0, tangleTime: 0, smBoost: 0, rescue: false,   // tangle detection → temporary extra shape memory
+  grid: null,
+  massSet: -1,
+  aEdge: 0, aShear: 0, aRing: 0, aBend: 0, aTri: 0, smK: 0, creep: 0, recover: 0, dampK: 0, tau: 0,
+};
+
+function outlineRadius(ang) {            // polar radius of the rest outline
+  const c = Math.abs(Math.cos(ang)), s = Math.abs(Math.sin(ang));
+  return 1 / Math.pow(Math.pow(c / HALF_W, OUTLINE_EXP) + Math.pow(s / HALF_H, OUTLINE_EXP), 1 / OUTLINE_EXP);
+}
+
+function distToClosedPolyline(x, y, xs, ys, n) {
+  let best = Infinity;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n, ax = xs[i], ay = ys[i], ex = xs[j] - ax, ey = ys[j] - ay;
+    const t = clamp(((x - ax) * ex + (y - ay) * ey) / (ex * ex + ey * ey), 0, 1);
+    const dx = x - ax - ex * t, dy = y - ay - ey * t;
+    best = Math.min(best, dx * dx + dy * dy);
+  }
+  return Math.sqrt(best);
+}
+
+// Bowyer–Watson Delaunay triangulation (run once to mesh the butter).
+function delaunay(px, py) {
+  const n = px.length;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < n; i++) {
+    minX = Math.min(minX, px[i]); maxX = Math.max(maxX, px[i]);
+    minY = Math.min(minY, py[i]); maxY = Math.max(maxY, py[i]);
+  }
+  const d = Math.max(maxX - minX, maxY - minY) * 200, mx = (minX + maxX) / 2, my = (minY + maxY) / 2;
+  const X = px.concat([mx - d, mx, mx + d]), Y = py.concat([my - d, my + d, my - d]);
+  const tri = (a, b, c) => {
+    const ax = X[a], ay = Y[a], bx = X[b], by = Y[b], cx = X[c], cy = Y[c];
+    const D = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
+    const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / D;
+    const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / D;
+    return { a, b, c, x: ux, y: uy, r2: (ax - ux) * (ax - ux) + (ay - uy) * (ay - uy) };
+  };
+  let tris = [tri(n, n + 1, n + 2)];
+  for (let i = 0; i < n; i++) {
+    const x = X[i], y = Y[i], keep = [], edges = [];
+    for (const t of tris) {
+      const dx = t.x - x, dy = t.y - y;
+      if (dx * dx + dy * dy < t.r2) edges.push(t.a, t.b, t.b, t.c, t.c, t.a); else keep.push(t);
+    }
+    const count = new Map();
+    for (let k = 0; k < edges.length; k += 2) {
+      const a = edges[k], b = edges[k + 1], key = a < b ? a * 100003 + b : b * 100003 + a;
+      count.set(key, (count.get(key) || 0) + 1);
+    }
+    for (let k = 0; k < edges.length; k += 2) {
+      const a = edges[k], b = edges[k + 1], key = a < b ? a * 100003 + b : b * 100003 + a;
+      if (count.get(key) === 1) keep.push(tri(a, b, i));
+    }
+    tris = keep;
+  }
+  return tris.filter(t => t.a < n && t.b < n && t.c < n).map(t => [t.a, t.b, t.c]);
+}
+
+function buildButterMesh() {
+  // --- outline: points evenly spaced by arc length on the superellipse ---
+  const SAMPLES = 4000, sx = [], sy = [], cum = [0];
+  for (let k = 0; k <= SAMPLES; k++) {
+    const t = k / SAMPLES * TAU, r = outlineRadius(t);
+    sx.push(r * Math.cos(t)); sy.push(r * Math.sin(t));
+    if (k) cum.push(cum[k - 1] + Math.hypot(sx[k] - sx[k - 1], sy[k] - sy[k - 1]));
+  }
+  const perim = cum[SAMPLES], nb = Math.round(perim / EDGE_SPACING);
+  const px = [], py = [];
+  let seg = 0;
+  for (let k = 0; k < nb; k++) {
+    const target = k / nb * perim;
+    while (cum[seg + 1] < target) seg++;
+    const u = (target - cum[seg]) / (cum[seg + 1] - cum[seg]);
+    px.push(sx[seg] + (sx[seg + 1] - sx[seg]) * u);
+    py.push(sy[seg] + (sy[seg + 1] - sy[seg]) * u);
+  }
+  // --- interior: hexagonal lattice kept a little away from the outline ---
+  const rowH = LATTICE * Math.sqrt(3) / 2, rows = Math.ceil(HALF_H / rowH) + 1, cols = Math.ceil(HALF_W / LATTICE) + 1;
+  let jit = 0;
+  for (let r = -rows; r <= rows; r++) {
+    const y = r * rowH, off = (r & 1) ? LATTICE / 2 : 0;
+    for (let c = -cols; c <= cols; c++) {
+      const x = c * LATTICE + off;
+      if (Math.pow(Math.abs(x) / HALF_W, OUTLINE_EXP) + Math.pow(Math.abs(y) / HALF_H, OUTLINE_EXP) >= 1) continue;
+      if (distToClosedPolyline(x, y, px, py, nb) < LATTICE * 0.6) continue;
+      jit++;
+      px.push(x + 0.2 * Math.sin(jit * 12.9898)); py.push(y + 0.2 * Math.cos(jit * 78.233));
+    }
+  }
+  const n = px.length;
+
+  // --- triangles (consistently oriented, slivers dropped) ---
+  const T = [];
+  for (const [a, b, c] of delaunay(px, py)) {
+    const ar = 0.5 * ((px[b] - px[a]) * (py[c] - py[a]) - (px[c] - px[a]) * (py[b] - py[a]));
+    if (Math.abs(ar) < 2) continue;
+    if (ar > 0) T.push(a, b, c); else T.push(a, c, b);
+  }
+
+  // --- edges + the two opposite vertices of each edge (for shear springs) ---
+  const edgeMap = new Map(), E = [], opp = [];
+  const key = (a, b) => (a < b ? a * n + b : b * n + a);
+  const addEdge = (a, b, o) => {
+    const k0 = key(a, b);
+    let k = edgeMap.get(k0);
+    if (k === undefined) { k = E.length / 2; edgeMap.set(k0, k); E.push(Math.min(a, b), Math.max(a, b)); opp.push(o, -1); }
+    else if (opp[2 * k + 1] < 0 && o >= 0) opp[2 * k + 1] = o;
+  };
+  for (let t = 0; t < T.length; t += 3) {
+    addEdge(T[t], T[t + 1], T[t + 2]); addEdge(T[t + 1], T[t + 2], T[t]); addEdge(T[t + 2], T[t], T[t + 1]);
+  }
+  for (let i = 0; i < nb; i++) addEdge(i, (i + 1) % nb, -1);     // outline ring always connected
+  const nStruct = E.length / 2, shear = [];
+  for (let k = 0; k < nStruct; k++) {
+    const a = opp[2 * k], b = opp[2 * k + 1];
+    if (a >= 0 && b >= 0 && !edgeMap.has(key(a, b))) { edgeMap.set(key(a, b), -1); shear.push(a, b); }
+  }
+  const nShear = shear.length / 2;
+  // outline "bending" springs (skip one / skip two) keep the silhouette smooth instead of crumpling
+  for (const skip of [2, 3]) {
+    for (let i = 0; i < nb; i++) {
+      const j = (i + skip) % nb;
+      if (!edgeMap.has(key(i, j))) { edgeMap.set(key(i, j), -1); shear.push(i, j); }
+    }
+  }
+
+  // --- rest shape centred on its centre of mass ---
+  let mx = 0, my = 0;
+  for (let i = 0; i < n; i++) { mx += px[i]; my += py[i]; }
+  mx /= n; my /= n;
+  butter.n = n; butter.nb = nb;
+  butter.restX = new Float64Array(n); butter.restY = new Float64Array(n);
+  for (let i = 0; i < n; i++) { butter.restX[i] = px[i] - mx; butter.restY[i] = py[i] - my; }
+  butter.plX = Float64Array.from(butter.restX); butter.plY = Float64Array.from(butter.restY);
+
+  butter.ne = nStruct + shear.length / 2;
+  butter.edges = new Int32Array(E.concat(shear));
+  // edge kinds: 0 interior, 1 shear, 2 outline ring, 3 outline bending
+  butter.edgeKind = new Uint8Array(butter.ne);
+  for (let k = 0; k < butter.ne; k++) {
+    const a = butter.edges[2 * k], b = butter.edges[2 * k + 1];
+    if (k >= nStruct + nShear) butter.edgeKind[k] = 3;
+    else if (k >= nStruct) butter.edgeKind[k] = 1;
+    else if (a < nb && b < nb && (b - a === 1 || b - a === nb - 1)) butter.edgeKind[k] = 2;
+  }
+  butter.edgeRest = new Float64Array(butter.ne);
+  updateEdgeRest(butter.restX, butter.restY);
+
+  butter.nt = T.length / 3;
+  butter.tris = new Int32Array(T);
+  butter.triArea = new Float64Array(butter.nt);
+  const qx = butter.restX, qy = butter.restY;
+  for (let k = 0; k < butter.nt; k++) {
+    const a = T[3 * k], b = T[3 * k + 1], c = T[3 * k + 2];
+    butter.triArea[k] = 0.5 * ((qx[b] - qx[a]) * (qy[c] - qy[a]) - (qx[c] - qx[a]) * (qy[b] - qy[a]));
+  }
+  let A = 0;
+  for (let i = 0; i < nb; i++) { const j = (i + 1) % nb; A += qx[i] * qy[j] - qx[j] * qy[i]; }
+  butter.area0 = 0.5 * A;
+  butter.orient = A > 0 ? 1 : -1;
+  butter.gradX = new Float64Array(nb); butter.gradY = new Float64Array(nb);
+  butter.curveA = new Float64Array(nb); butter.curveB = new Float64Array(nb);
+
+  // shape-matching moment matrix (for measuring squash)
+  let s11 = 0, s12 = 0, s22 = 0;
+  for (let i = 0; i < n; i++) { s11 += qx[i] * qx[i]; s12 += qx[i] * qy[i]; s22 += qy[i] * qy[i]; }
+  const det = s11 * s22 - s12 * s12;
+  butter.aqqInv = [s22 / det, -s12 / det, -s12 / det, s11 / det];
+
+  BX = new Float64Array(n); BY = new Float64Array(n); BPX = new Float64Array(n); BPY = new Float64Array(n);
+  BVX = new Float64Array(n); BVY = new Float64Array(n); BW = new Float64Array(n);
+  BSX = new Float64Array(n); BSY = new Float64Array(n); RX = new Float64Array(n); RY = new Float64Array(n);
+  butter.stick = new Float64Array(n); butter.onFloor = new Uint8Array(n);
+  buildRestGrid();
+}
+
+function updateEdgeRest(qx, qy) {
+  const E = butter.edges, R = butter.edgeRest;
+  for (let k = 0; k < butter.ne; k++) {
+    const i = E[2 * k], j = E[2 * k + 1];
+    R[k] = Math.hypot(qx[i] - qx[j], qy[i] - qy[j]);
+  }
+}
+
+// Spatial grid over the rest-space triangles; used to map rest-space points
+// (highlights) onto the deformed body.
+function buildRestGrid() {
+  const qx = butter.restX, qy = butter.restY, T = butter.tris, cs = 20;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < butter.n; i++) {
+    minX = Math.min(minX, qx[i]); maxX = Math.max(maxX, qx[i]);
+    minY = Math.min(minY, qy[i]); maxY = Math.max(maxY, qy[i]);
+  }
+  const x0 = minX - 1, y0 = minY - 1;
+  const cols = Math.ceil((maxX - x0 + 1) / cs), rows = Math.ceil((maxY - y0 + 1) / cs);
+  const cells = Array.from({ length: cols * rows }, () => []);
+  for (let k = 0; k < butter.nt; k++) {
+    const a = T[3 * k], b = T[3 * k + 1], c = T[3 * k + 2];
+    const c0 = Math.floor((Math.min(qx[a], qx[b], qx[c]) - x0) / cs), c1 = Math.floor((Math.max(qx[a], qx[b], qx[c]) - x0) / cs);
+    const r0 = Math.floor((Math.min(qy[a], qy[b], qy[c]) - y0) / cs), r1 = Math.floor((Math.max(qy[a], qy[b], qy[c]) - y0) / cs);
+    for (let r = r0; r <= r1; r++) for (let cc = c0; cc <= c1; cc++) cells[r * cols + cc].push(k);
+  }
+  butter.grid = { cs, x0, y0, cols, rows, cells };
+}
+
+function placeButter(cx, cy) {
+  const n = butter.n;
+  for (let i = 0; i < n; i++) {
+    BX[i] = BPX[i] = BSX[i] = cx + butter.restX[i];
+    BY[i] = BPY[i] = BSY[i] = cy + butter.restY[i];
+    BVX[i] = BVY[i] = 0;
+    butter.stick[i] = 0; butter.onFloor[i] = 0;
+  }
+  butter.plX.set(butter.restX); butter.plY.set(butter.restY);
+  updateEdgeRest(butter.plX, butter.plY);
+  updateCurveRest();
+  butter.cx = cx; butter.cy = cy; butter.angle = 0; butter.squash = 0; butter.vcx = butter.vcy = 0;
+  butter.inverted = 0; butter.tangleTime = 0; butter.smBoost = 0; butter.rescue = false;
+}
+
+// Base material constants (scaled by the sliders in deriveParams).
+const tune = {
+  edge: 6e-3,        // edge compliance
+  shear: 3,          // interior shear springs are this much softer
+  ring: 0.8,         // outline edges relative to interior edges
+  bend: 1.5,         // outline skip-springs relative to interior edges
+  curve: 0.035,      // outline curvature memory (per substep): keeps the silhouette smooth, unfolds kinks
+  tau: 0.004,        // viscous (strain-rate) damping time at damping slider 0.5 (s)
+  sink: 5,           // objects pressing into the butter lose relative speed at this rate (1/s)
+  tri: 0.02,         // per-triangle area compliance
+  smBase: 0.35,      // shape-memory frequency (Hz) at elasticity 0 …
+  smElastic: 1.6,    // … plus this much at elasticity 1
+  floorMuS: 0.95,    // butter ↔ floor static friction
+  floorMuK: 0.65,    // butter ↔ floor kinetic friction
+  stick: 1,          // floor stickiness multiplier
+  plastic: 1,        // plasticity (creep) multiplier
+  roll: 3.5,         // rolling resistance while resting on the floor (1/s)
+  damp: 0.7,         // internal damping at damping slider 0 (1/s) …
+  dampRange: 25,     // … multiplied by up to this at slider 1
+};
+
+// Slider values → solver parameters.
+function deriveParams() {
+  if (butter.massSet !== params.mass) {
+    const w = butter.n / params.mass;
+    BW.fill(w);
+    butter.massSet = params.mass;
+  }
+  const soft = Math.pow(4, (params.softness - 0.5) * 2);   // 0.25× … 4× compliance
+  const massK = Math.sqrt(params.mass / 3);                  // heavier butter: a bit stiffer, but slower & saggier
+  const E = params.elasticity;
+  butter.aEdge = tune.edge * soft / massK;
+  butter.aShear = butter.aEdge * tune.shear;
+  butter.aRing = butter.aEdge * tune.ring;
+  butter.aBend = butter.aEdge * tune.bend;
+  butter.aTri = tune.tri * soft / massK;
+  const f = (tune.smBase + tune.smElastic * E) / Math.pow(soft, 0.4);   // shape-memory frequency (Hz)
+  const om = TAU * f * (STEP_DT / SUBSTEPS);
+  butter.smK = Math.min(0.02, om * om);
+  butter.creep = (0.08 + 1.6 * (1 - E) * (1 - E)) * tune.plastic;   // how fast sustained deformation "sets"
+  butter.recover = 0.2 + 0.85 * E;                                    // how fast the original shape returns
+  butter.dampK = tune.damp * Math.pow(tune.dampRange, params.damping);   // internal (jiggle) damping, 1/s
+  butter.tau = tune.tau * Math.pow(4, (params.damping - 0.5) * 2);       // viscous damping (works under heavy loads too)
+}
+
+// Global shape matching toward the plastic rest shape (also tracks COM + rotation).
+function butterShapeMatch() {
+  const n = butter.n, plX = butter.plX, plY = butter.plY;
+  let cx = 0, cy = 0;
+  for (let i = 0; i < n; i++) { cx += BX[i]; cy += BY[i]; }
+  cx /= n; cy /= n;
+  let a11 = 0, a12 = 0, a21 = 0, a22 = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = BX[i] - cx, dy = BY[i] - cy, qx = plX[i], qy = plY[i];
+    a11 += dx * qx; a12 += dx * qy; a21 += dy * qx; a22 += dy * qy;
+  }
+  const ang = Math.atan2(a21 - a12, a11 + a22);
+  butter.cx = cx; butter.cy = cy; butter.angle = ang;
+  const k = Math.max(butter.smK, butter.smBoost), c = Math.cos(ang), s = Math.sin(ang);
+  for (let i = 0; i < n; i++) {
+    BX[i] += (cx + c * plX[i] - s * plY[i] - BX[i]) * k;
+    BY[i] += (cy + s * plX[i] + c * plY[i] - BY[i]) * k;
+  }
+}
+
+// Distance constraints with smooth strain limiting (stiffens at extreme stretch / compression).
+function butterEdges(h) {
+  const E = butter.edges, R = butter.edgeRest, K = butter.edgeKind, ne = butter.ne, ih2 = 1 / (h * h);
+  const alphas = [butter.aEdge * ih2, butter.aShear * ih2, butter.aRing * ih2, butter.aBend * ih2];
+  const gamma = butter.tau / h;     // XPBD stiffness-proportional damping
+  for (let k = 0; k < ne; k++) {
+    const i = E[2 * k], j = E[2 * k + 1];
+    const dx = BX[i] - BX[j], dy = BY[i] - BY[j];
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 1e-7) continue;
+    const L = R[k], ratio = d / L;
+    let a = alphas[K[k]];
+    const ex = ratio > 1.8 ? ratio - 1.8 : ratio < 0.6 ? 2 * (0.6 - ratio) : 0;
+    if (ex > 0 && !butter.rescue) a /= 1 + 120 * ex * ex;
+    const wi = BW[i], wj = BW[j];
+    const rate = (dx * (BX[i] - BPX[i] - BX[j] + BPX[j]) + dy * (BY[i] - BPY[i] - BY[j] + BPY[j])) / d;
+    const s = (L - d - gamma * rate) / (((1 + gamma) * (wi + wj) + a) * d);
+    const cx = dx * s, cy = dy * s;
+    BX[i] += wi * cx; BY[i] += wi * cy;
+    BX[j] -= wj * cx; BY[j] -= wj * cy;
+  }
+}
+
+// Outline curvature memory: every outline particle is pulled toward where its rest
+// shape puts it relative to its two neighbours (expressed in the frame of the chord
+// between them, so it is rotation/scale invariant and knows which side is "out").
+function updateCurveRest() {
+  const nb = butter.nb, qx = butter.plX, qy = butter.plY;
+  for (let i = 0; i < nb; i++) {
+    const p = i === 0 ? nb - 1 : i - 1, q = i + 1 === nb ? 0 : i + 1;
+    const cx = qx[q] - qx[p], cy = qy[q] - qy[p], c2 = cx * cx + cy * cy;
+    const dx = qx[i] - 0.5 * (qx[p] + qx[q]), dy = qy[i] - 0.5 * (qy[p] + qy[q]);
+    butter.curveA[i] = (dx * cx + dy * cy) / c2;
+    butter.curveB[i] = (dx * -cy + dy * cx) / c2;
+  }
+}
+function butterCurvature() {
+  if (butter.rescue) return;
+  const nb = butter.nb, ca = butter.curveA, cb = butter.curveB, k = tune.curve;
+  for (let i = 0; i < nb; i++) {
+    const p = i === 0 ? nb - 1 : i - 1, q = i + 1 === nb ? 0 : i + 1;
+    const cx = BX[q] - BX[p], cy = BY[q] - BY[p];
+    const tx = 0.5 * (BX[p] + BX[q]) + ca[i] * cx - cb[i] * cy;
+    const ty = 0.5 * (BY[p] + BY[q]) + ca[i] * cy + cb[i] * cx;
+    const dx = (tx - BX[i]) * k, dy = (ty - BY[i]) * k;
+    BX[i] += dx * (2 / 3); BY[i] += dy * (2 / 3);
+    BX[p] -= dx / 3; BY[p] -= dy / 3;
+    BX[q] -= dx / 3; BY[q] -= dy / 3;
+  }
+}
+
+// Per-triangle area constraints (compliant, to avoid volumetric locking).
+function butterTris(h) {
+  const T = butter.tris, A0 = butter.triArea, nt = butter.nt, a = butter.aTri / (h * h);
+  for (let k = 0; k < nt; k++) {
+    const i0 = T[3 * k], i1 = T[3 * k + 1], i2 = T[3 * k + 2];
+    const x0 = BX[i0], y0 = BY[i0], x1 = BX[i1], y1 = BY[i1], x2 = BX[i2], y2 = BY[i2];
+    const A = 0.5 * ((x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)), C = A - A0[k];
+    const g0x = 0.5 * (y1 - y2), g0y = 0.5 * (x2 - x1);
+    const g1x = 0.5 * (y2 - y0), g1y = 0.5 * (x0 - x2);
+    const g2x = 0.5 * (y0 - y1), g2y = 0.5 * (x1 - x0);
+    const w0 = BW[i0], w1 = BW[i1], w2 = BW[i2];
+    // strongly compressed / inverted triangles become (almost) rigid: the interior can't
+    // overtake the outline on hard impacts, and tangles untangle themselves
+    const r = butter.rescue ? 1 : A / A0[k];
+    const den = w0 * (g0x * g0x + g0y * g0y) + w1 * (g1x * g1x + g1y * g1y) + w2 * (g2x * g2x + g2y * g2y) +
+      (r < 0.55 ? a * 0.01 : r < 0.75 ? a * 0.15 : a);
+    if (den < 1e-12) continue;
+    const dl = -C / den;
+    BX[i0] += w0 * dl * g0x; BY[i0] += w0 * dl * g0y;
+    BX[i1] += w1 * dl * g1x; BY[i1] += w1 * dl * g1y;
+    BX[i2] += w2 * dl * g2x; BY[i2] += w2 * dl * g2y;
+    if (A < 0) { butter.inverted++; untangleTri(i0, i1, i2); }
+  }
+}
+
+// An inverted triangle can be "stable" under distance constraints (a mirror image has
+// the same edge lengths), so pull its corners toward a correctly oriented copy of it.
+function untangleTri(i0, i1, i2) {
+  const qx = butter.restX, qy = butter.restY;
+  const cx = (BX[i0] + BX[i1] + BX[i2]) / 3, cy = (BY[i0] + BY[i1] + BY[i2]) / 3;
+  const rx = (qx[i0] + qx[i1] + qx[i2]) / 3, ry = (qy[i0] + qy[i1] + qy[i2]) / 3;
+  let a11 = 0, a12 = 0, a21 = 0, a22 = 0;
+  for (const i of [i0, i1, i2]) {
+    const dx = BX[i] - cx, dy = BY[i] - cy, ux = qx[i] - rx, uy = qy[i] - ry;
+    a11 += dx * ux; a12 += dx * uy; a21 += dy * ux; a22 += dy * uy;
+  }
+  const ang = Math.atan2(a21 - a12, a11 + a22), c = Math.cos(ang), s = Math.sin(ang);
+  for (const i of [i0, i1, i2]) {
+    const ux = qx[i] - rx, uy = qy[i] - ry;
+    BX[i] += (cx + c * ux - s * uy - BX[i]) * 0.25;
+    BY[i] += (cy + s * ux + c * uy - BY[i]) * 0.25;
+  }
+}
+
+// Global area (volume) constraint on the outline → internal pressure.
+function butterArea(h) {
+  const nb = butter.nb, gx = butter.gradX, gy = butter.gradY;
+  let A = 0;
+  for (let i = 0; i < nb; i++) { const j = i + 1 === nb ? 0 : i + 1; A += BX[i] * BY[j] - BX[j] * BY[i]; }
+  const C = 0.5 * A - butter.area0;
+  let den = 0, gmax = 0;
+  for (let i = 0; i < nb; i++) {
+    const ip = i + 1 === nb ? 0 : i + 1, im = i === 0 ? nb - 1 : i - 1;
+    const x = 0.5 * (BY[ip] - BY[im]), y = 0.5 * (BX[im] - BX[ip]);
+    gx[i] = x; gy[i] = y;
+    const g2 = x * x + y * y;
+    den += BW[i] * g2;
+    if (g2 > gmax) gmax = g2;
+  }
+  den += 2e-7 / (h * h);
+  if (den < 1e-12) return;
+  let dl = -C / den;
+  const lim = 1.5 / (BW[0] * Math.sqrt(gmax) + 1e-9);      // max 1.5 units of movement per substep
+  if (dl > lim) dl = lim; else if (dl < -lim) dl = -lim;
+  for (let i = 0; i < nb; i++) { BX[i] += BW[i] * dl * gx[i]; BY[i] += BW[i] * dl * gy[i]; }
+}
+
+// Internal damping: damp velocities relative to the rigid motion (keeps throws intact).
+function dampButter(dt) {
+  const n = butter.n;
+  let cx = 0, cy = 0, vx = 0, vy = 0;
+  for (let i = 0; i < n; i++) { cx += BX[i]; cy += BY[i]; vx += BVX[i]; vy += BVY[i]; }
+  cx /= n; cy /= n; vx /= n; vy /= n;
+  let L = 0, I = 0;
+  for (let i = 0; i < n; i++) {
+    const rx = BX[i] - cx, ry = BY[i] - cy;
+    L += rx * (BVY[i] - vy) - ry * (BVX[i] - vx);
+    I += rx * rx + ry * ry;
+  }
+  const om = I > 0 ? L / I : 0;
+  const k = Math.exp(-butter.dampK * dt), air = Math.exp(-0.03 * dt);
+  // settle rocking while lying on a broad contact patch (not while balanced on a corner,
+  // where damping spin would hold it in an unnatural balance)
+  let contacts = 0, om1 = om;
+  for (let i = 0; i < butter.nb; i++) contacts += butter.onFloor[i];
+  if (contacts >= 8) om1 = om * Math.exp(-tune.roll * Math.min(1, (contacts - 7) / 8) * dt);
+  for (let i = 0; i < n; i++) {
+    const rx = BX[i] - cx, ry = BY[i] - cy;
+    const rvx = vx - om * ry, rvy = vy + om * rx;
+    BVX[i] = (vx - om1 * ry + (BVX[i] - rvx) * k) * air;
+    BVY[i] = (vy + om1 * rx + (BVY[i] - rvy) * k) * air;
+  }
+  butter.vcx = vx; butter.vcy = vy;
+}
+
+// Plasticity: rest shape creeps toward the current (de-rotated) shape and recovers.
+function updatePlasticity(dt) {
+  const n = butter.n, plX = butter.plX, plY = butter.plY, qx = butter.restX, qy = butter.restY;
+  const cx = butter.cx, cy = butter.cy, c = Math.cos(-butter.angle), s = Math.sin(-butter.angle);
+  const kc = 1 - Math.exp(-butter.creep * dt), kr = 1 - Math.exp(-butter.recover * dt);
+  let mx = 0, my = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = BX[i] - cx, dy = BY[i] - cy;
+    const lx = c * dx - s * dy, ly = s * dx + c * dy;
+    let px = plX[i] + (lx - plX[i]) * kc, py = plY[i] + (ly - plY[i]) * kc;
+    px += (qx[i] - px) * kr; py += (qy[i] - py) * kr;
+    const ox = px - qx[i], oy = py - qy[i], o = Math.hypot(ox, oy);
+    if (o > MAX_PLASTIC) { px = qx[i] + ox * MAX_PLASTIC / o; py = qy[i] + oy * MAX_PLASTIC / o; }
+    plX[i] = px; plY[i] = py; mx += px; my += py;
+  }
+  mx /= n; my /= n;
+  for (let i = 0; i < n; i++) { plX[i] -= mx; plY[i] -= my; }
+  updateEdgeRest(plX, plY);
+  updateCurveRest();
+}
+
+// Does the outline intersect itself anywhere? (tangle detection)
+function outlineCrosses() {
+  const nb = butter.nb;
+  for (let i = 0; i < nb; i++) {
+    const i1 = i + 1 === nb ? 0 : i + 1, ax = BX[i], ay = BY[i], bx = BX[i1], by = BY[i1];
+    const minx = Math.min(ax, bx), maxx = Math.max(ax, bx), miny = Math.min(ay, by), maxy = Math.max(ay, by);
+    for (let j = i + 2; j < nb; j++) {
+      if (i === 0 && j === nb - 1) continue;
+      const j1 = j + 1 === nb ? 0 : j + 1, cx = BX[j], cy = BY[j], dx = BX[j1], dy = BY[j1];
+      if (Math.max(cx, dx) < minx || Math.min(cx, dx) > maxx || Math.max(cy, dy) < miny || Math.min(cy, dy) > maxy) continue;
+      const o1 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax), o2 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
+      const o3 = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx), o4 = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx);
+      if ((o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0)) return true;
+    }
+  }
+  return false;
+}
+
+// How flattened the butter is overall (1 - smallest principal stretch).
+function measureSquash() {
+  const n = butter.n, qx = butter.restX, qy = butter.restY, cx = butter.cx, cy = butter.cy;
+  let a11 = 0, a12 = 0, a21 = 0, a22 = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = BX[i] - cx, dy = BY[i] - cy;
+    a11 += dx * qx[i]; a12 += dx * qy[i]; a21 += dy * qx[i]; a22 += dy * qy[i];
+  }
+  const m = butter.aqqInv;
+  const f11 = a11 * m[0] + a12 * m[2], f12 = a11 * m[1] + a12 * m[3];
+  const f21 = a21 * m[0] + a22 * m[2], f22 = a21 * m[1] + a22 * m[3];
+  const E = (f11 + f22) / 2, F = (f11 - f22) / 2, G = (f21 + f12) / 2, H = (f21 - f12) / 2;
+  const sMin = Math.abs(Math.hypot(E, H) - Math.hypot(F, G));
+  butter.squash = clamp(1 - sMin, 0, 1);
+}
+
+/* =========================================================================
+   3. COLLISION HANDLING
+   Butter ↔ world bounds (with floor friction and stickiness),
+   rigid ↔ world, rigid ↔ rigid, rigid ↔ butter (outline edges + particles).
+   ========================================================================= */
+
+const bb = { minX: 0, minY: 0, maxX: 0, maxY: 0 };   // butter AABB
+let nearI = 0, nearT = 0, nearD2 = 0, enx = 0, eny = 0;
+
+function butterBounds() {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < butter.nb; i++) {
+    const x = BX[i], y = BY[i];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  bb.minX = minX - 4; bb.minY = minY - 4; bb.maxX = maxX + 4; bb.maxY = maxY + 4;
+}
+
+function pointInButter(x, y) {
+  if (x < bb.minX || x > bb.maxX || y < bb.minY || y > bb.maxY) return false;
+  let inside = false;
+  const nb = butter.nb;
+  for (let i = 0, j = nb - 1; i < nb; j = i++) {
+    const yi = BY[i], yj = BY[j];
+    if ((yi > y) !== (yj > y) && x < (BX[j] - BX[i]) * (y - yi) / (yj - yi) + BX[i]) inside = !inside;
+  }
+  return inside;
+}
+
+function nearestButterEdge(x, y) {
+  const nb = butter.nb;
+  let best = Infinity;
+  for (let i = 0; i < nb; i++) {
+    const j = i + 1 === nb ? 0 : i + 1, ax = BX[i], ay = BY[i], ex = BX[j] - ax, ey = BY[j] - ay;
+    const L2 = ex * ex + ey * ey;
+    const t = L2 > 1e-9 ? clamp(((x - ax) * ex + (y - ay) * ey) / L2, 0, 1) : 0;
+    const dx = x - ax - ex * t, dy = y - ay - ey * t, d2 = dx * dx + dy * dy;
+    if (d2 < best) { best = d2; nearI = i; nearT = t; }
+  }
+  nearD2 = best;
+}
+
+function edgeNormal(i) {                 // outward normal of outline edge i → (enx, eny)
+  const j = i + 1 === butter.nb ? 0 : i + 1;
+  const dx = BX[j] - BX[i], dy = BY[j] - BY[i], L = Math.hypot(dx, dy) || 1;
+  enx = butter.orient * dy / L; eny = -butter.orient * dx / L;
+}
+
+// Butter particles vs floor, walls and ceiling. Includes floor friction and
+// stickiness: when the butter is strongly flattened the bottom grips the floor.
+function collideButterWorld(h) {
+  const n = butter.n, F = world.floorY - 1, Rw = world.w - 1, L = 1, T = 1;
+  const muS = tune.floorMuS, muK = tune.floorMuK, ih2 = 1 / (h * h);
+  const sq = butter.squash, gain = sq > STICK_SQUASH ? (sq - STICK_SQUASH) * 16 * tune.stick : 0;
+  const loadScale = ih2 / 2000 / STICK_LOAD;
+  const breakForce = STICK_STRENGTH * 2000 / BW[0];         // per particle, scales with butter mass
+  const stickAlpha = STICK_RANGE / breakForce;
+  const stick = butter.stick, onFloor = butter.onFloor;
+  for (let i = 0; i < n; i++) {
+    if (BY[i] > F) {
+      const d = BY[i] - F;
+      BY[i] = F;
+      const dx = BX[i] - BPX[i], ad = Math.abs(dx);
+      if (ad < muS * d) BX[i] = BPX[i]; else BX[i] -= dx * Math.min(muK * d / ad, 1);
+      onFloor[i] = 1;
+      const load = d * loadScale;                       // > 1 when this spot is pressed hard into the floor
+      const g = Math.max(gain, load > 1 ? Math.min(6, (load - 1) * 6) * tune.stick : 0);
+      if (g > 0) stick[i] = Math.min(1, stick[i] + g * h);
+    } else {
+      onFloor[i] = BY[i] > F - 1.5 ? 1 : 0;
+      const st = stick[i];
+      if (st > 0) {
+        const gap = F - BY[i];
+        if (gap > STICK_RANGE) stick[i] = 0;
+        else {
+          const dl = gap / (BW[i] + stickAlpha / st * ih2);
+          if (dl * ih2 > breakForce * st) stick[i] = 0;       // pulled hard enough → it pops free
+          else BY[i] += BW[i] * dl;
+        }
+      }
+    }
+    if (stick[i] > 0) stick[i] = Math.max(0, stick[i] - STICK_DECAY * h);
+    if (BX[i] < L) {
+      const d = L - BX[i]; BX[i] = L;
+      const dy = BY[i] - BPY[i], ad = Math.abs(dy);
+      if (ad < muS * d) BY[i] = BPY[i]; else BY[i] -= dy * Math.min(muK * d / ad, 1);
+    } else if (BX[i] > Rw) {
+      const d = BX[i] - Rw; BX[i] = Rw;
+      const dy = BY[i] - BPY[i], ad = Math.abs(dy);
+      if (ad < muS * d) BY[i] = BPY[i]; else BY[i] -= dy * Math.min(muK * d / ad, 1);
+    }
+    if (BY[i] < T) {
+      const d = T - BY[i]; BY[i] = T;
+      const dx = BX[i] - BPX[i], ad = Math.abs(dx);
+      if (ad < muS * d) BX[i] = BPX[i]; else BX[i] -= dx * Math.min(muK * d / ad, 1);
+    }
+  }
+}
+
+// A point (with radius) of rigid body b against the four world planes.
+function pointVsWorld(b, x, y, rad) {
+  const muS = b.mu, muK = b.mu * 0.8, e = b.e;
+  let hit = false, d;
+  if ((d = y + rad - world.floorY) > 0) { setStatic(SA); setBody(SB, b, x, y + rad); resolveContact(0, -1, d, muS, muK, e); hit = true; }
+  if ((d = rad - y) > 0) { setStatic(SA); setBody(SB, b, x, y - rad); resolveContact(0, 1, d, muS, muK, e); hit = true; }
+  if ((d = rad - x) > 0) { setStatic(SA); setBody(SB, b, x - rad, y); resolveContact(1, 0, d, muS, muK, e); hit = true; }
+  if ((d = x + rad - world.w) > 0) { setStatic(SA); setBody(SB, b, x + rad, y); resolveContact(-1, 0, d, muS, muK, e); hit = true; }
+  if (hit) b.updateWorld();
+  return hit;
+}
+
+function collideBodyWorld(b) {
+  b.updateWorld();
+  for (const p of b.parts) {
+    if (p.type === 0) pointVsWorld(b, p.wx, p.wy, p.r);
+    else for (let k = 0; k < p.lv.length; k += 2) pointVsWorld(b, p.wv[k], p.wv[k + 1], 0);
+  }
+}
+
+// ---- rigid ↔ rigid ----
+function collideBodies(A, B) {
+  const dx = B.x - A.x, dy = B.y - A.y, rr = A.radius + B.radius;
+  if (dx * dx + dy * dy > rr * rr) return;
+  const e = (A.e + B.e) * 0.5, mu = Math.sqrt(A.mu * B.mu);
+  A.updateWorld(); B.updateWorld();
+  for (const pa of A.parts) for (const pb of B.parts) {
+    if (pa.type === 0 && pb.type === 0) circleCircle(A, pa, B, pb, mu, e);
+    else if (pa.type === 0) circlePoly(A, pa, B, pb, mu, e);
+    else if (pb.type === 0) circlePoly(B, pb, A, pa, mu, e);
+    else { polyPoly(A, pa, B, pb, mu, e); polyPoly(B, pb, A, pa, mu, e); }
+  }
+}
+
+function circleCircle(A, pa, B, pb, mu, e) {
+  const dx = pb.wx - pa.wx, dy = pb.wy - pa.wy, R = pa.r + pb.r, d2 = dx * dx + dy * dy;
+  if (d2 >= R * R) return;
+  const d = Math.sqrt(d2), nx = d > 1e-6 ? dx / d : 0, ny = d > 1e-6 ? dy / d : -1, depth = R - d;
+  const px = pa.wx + nx * (pa.r - depth / 2), py = pa.wy + ny * (pa.r - depth / 2);
+  setBody(SA, A, px, py); setBody(SB, B, px, py);
+  resolveContact(nx, ny, depth, mu, mu * 0.8, e);
+  A.updateWorld(); B.updateWorld();
+}
+
+function circlePoly(C, pc, P, pp, mu, e) {
+  const cx = pc.wx, cy = pc.wy, r = pc.r, wv = pp.wv, wn = pp.wn, nv = pp.n;
+  let maxSd = -Infinity, km = 0;
+  for (let k = 0; k < nv; k++) {
+    const sd = (cx - wv[2 * k]) * wn[2 * k] + (cy - wv[2 * k + 1]) * wn[2 * k + 1];
+    if (sd > maxSd) { maxSd = sd; km = k; }
+  }
+  if (maxSd >= r) return;
+  let nx, ny, depth, qx, qy;
+  if (maxSd <= 0) {                       // centre inside the polygon
+    nx = wn[2 * km]; ny = wn[2 * km + 1]; depth = r - maxSd; qx = cx - nx * maxSd; qy = cy - ny * maxSd;
+  } else {
+    let best = Infinity;
+    for (let k = 0; k < nv; k++) {
+      const j = (k + 1) % nv, ax = wv[2 * k], ay = wv[2 * k + 1], ex = wv[2 * j] - ax, ey = wv[2 * j + 1] - ay;
+      const t = clamp(((cx - ax) * ex + (cy - ay) * ey) / (ex * ex + ey * ey), 0, 1);
+      const x = ax + ex * t, y = ay + ey * t, d2 = (cx - x) * (cx - x) + (cy - y) * (cy - y);
+      if (d2 < best) { best = d2; qx = x; qy = y; }
+    }
+    if (best >= r * r) return;
+    const d = Math.sqrt(best);
+    if (d < 1e-6) return;
+    nx = (cx - qx) / d; ny = (cy - qy) / d; depth = r - d;
+  }
+  setBody(SA, P, qx, qy); setBody(SB, C, qx, qy);
+  resolveContact(nx, ny, depth, mu, mu * 0.8, e);
+  C.updateWorld(); P.updateWorld();
+}
+
+// Perimeter samples of polygon A that are inside polygon B are pushed out
+// through B's closest edge.
+function polyPoly(A, pa, B, pb, mu, e) {
+  if (pa.maxX < pb.minX || pa.minX > pb.maxX || pa.maxY < pb.minY || pa.minY > pb.maxY) return;
+  const ws = pa.ws, wv = pb.wv, wn = pb.wn, nv = pb.n;
+  for (let s = 0; s < ws.length; s += 2) {
+    const x = ws[s], y = ws[s + 1];
+    if (x < pb.minX || x > pb.maxX || y < pb.minY || y > pb.maxY) continue;
+    let best = -Infinity, km = -1;
+    for (let k = 0; k < nv; k++) {
+      const sd = (x - wv[2 * k]) * wn[2 * k] + (y - wv[2 * k + 1]) * wn[2 * k + 1];
+      if (sd >= 0) { km = -1; break; }
+      if (sd > best) { best = sd; km = k; }
+    }
+    if (km < 0) continue;
+    setBody(SA, B, x, y); setBody(SB, A, x, y);
+    resolveContact(wn[2 * km], wn[2 * km + 1], -best, mu, mu * 0.8, e);
+    A.updateWorld(); B.updateWorld();
+  }
+}
+
+// ---- rigid ↔ butter ----
+const BUTTER_MU_S = 0.75, BUTTER_MU_K = 0.55;
+
+function collideBodyButter(b) {
+  const r = b.radius;
+  if (b.x + r < bb.minX || b.x - r > bb.maxX || b.y + r < bb.minY || b.y - r > bb.maxY) return;
+  const before = b.x + b.y + b.a;
+  b.updateWorld();
+  const mu = b.kind === 'finger' ? 1.0 : BUTTER_MU_S;
+  for (const p of b.parts) {
+    if (p.type === 0) circleVsButter(b, p, mu);
+    else polyVsButter(b, p, mu);
+  }
+  if (b.x + b.y + b.a !== before) b.onButter = true;
+}
+
+function circleVsButter(b, p, muS) {
+  const nb = butter.nb, r = p.r, e = b.e * 0.45, muK = muS * 0.75;
+  if (p.wx + r < bb.minX || p.wx - r > bb.maxX || p.wy + r < bb.minY || p.wy - r > bb.maxY) return;
+  if (pointInButter(p.wx, p.wy)) {        // deep penetration → leave through the nearest edge
+    nearestButterEdge(p.wx, p.wy);
+    edgeNormal(nearI);
+    setEdge(SA, nearI, nearI + 1 === nb ? 0 : nearI + 1, nearT);
+    setBody(SB, b, p.wx - enx * r, p.wy - eny * r);
+    resolveContact(enx, eny, Math.sqrt(nearD2) + r, muS, muK, e);
+    b.updateWorld();
+    return;
+  }
+  for (let i = 0; i < nb; i++) {
+    const j = i + 1 === nb ? 0 : i + 1, cx = p.wx, cy = p.wy;
+    const ax = BX[i], ay = BY[i], bx = BX[j], by = BY[j];
+    if ((ax < bx ? ax : bx) > cx + r || (ax > bx ? ax : bx) < cx - r || (ay < by ? ay : by) > cy + r || (ay > by ? ay : by) < cy - r) continue;
+    const ex = bx - ax, ey = by - ay, L2 = ex * ex + ey * ey;
+    const t = L2 > 1e-9 ? clamp(((cx - ax) * ex + (cy - ay) * ey) / L2, 0, 1) : 0;
+    const qx = ax + ex * t, qy = ay + ey * t, dx = cx - qx, dy = cy - qy, d2 = dx * dx + dy * dy;
+    if (d2 >= r * r) continue;
+    const d = Math.sqrt(d2);
+    let nx, ny;
+    if (d > 1e-6) { nx = dx / d; ny = dy / d; } else { edgeNormal(i); nx = enx; ny = eny; }
+    setEdge(SA, i, j, t); setBody(SB, b, cx - nx * r, cy - ny * r);
+    resolveContact(nx, ny, r - d, muS, muK, e);
+    b.updateWorld();
+  }
+}
+
+function polyVsButter(b, p, muS) {
+  if (p.maxX < bb.minX || p.minX > bb.maxX || p.maxY < bb.minY || p.minY > bb.maxY) return;
+  const nb = butter.nb, e = b.e * 0.45, muK = muS * 0.75;
+  // (a) outline particles that ended up inside the polygon
+  for (let i = 0; i < nb; i++) {
+    const x = BX[i], y = BY[i];
+    if (x < p.minX || x > p.maxX || y < p.minY || y > p.maxY) continue;
+    const wv = p.wv, wn = p.wn;
+    let best = -Infinity, km = -1;
+    for (let k = 0; k < p.n; k++) {
+      const sd = (x - wv[2 * k]) * wn[2 * k] + (y - wv[2 * k + 1]) * wn[2 * k + 1];
+      if (sd >= 0) { km = -1; break; }
+      if (sd > best) { best = sd; km = k; }
+    }
+    if (km < 0) continue;
+    const nx = wn[2 * km], ny = wn[2 * km + 1];
+    setBody(SA, b, x - nx * best, y - ny * best); setParticle(SB, i);
+    resolveContact(nx, ny, -best, muS, muK, e);
+    b.updateWorld();
+  }
+  // (b) polygon perimeter samples that ended up inside the butter
+  const ws = p.ws;
+  for (let s = 0; s < ws.length; s += 2) {
+    const x = ws[s], y = ws[s + 1];
+    if (!pointInButter(x, y)) continue;
+    nearestButterEdge(x, y);
+    edgeNormal(nearI);
+    setEdge(SA, nearI, nearI + 1 === nb ? 0 : nearI + 1, nearT); setBody(SB, b, x, y);
+    resolveContact(enx, eny, Math.sqrt(nearD2), muS, muK, e);
+    b.updateWorld();
+  }
+}
+
+function solveCollisions() {
+  butterBounds();
+  for (let a = 0; a < bodies.length; a++)
+    for (let c = a + 1; c < bodies.length; c++) collideBodies(bodies[a], bodies[c]);
+  for (const b of bodies) collideBodyButter(b);
+  for (const b of bodies) collideBodyWorld(b);
+}
+
+/* =========================================================================
+   4. MOUSE INTERACTION
+   Pinch: grab the exact spot (a small patch of particles) with a soft
+   XPBD spring. Whole: hold the butter's core and fling it. Objects are
+   held by the exact point clicked. Empty space spawns a "finger" that
+   pokes and presses. Throw velocity comes from recent pointer history.
+   ========================================================================= */
+
+const PINCH_RADIUS = 44, PINCH_COMPLIANCE = 1 / 380;
+const WHOLE_RADIUS = 105, WHOLE_COMPLIANCE = 1 / 260;
+const OBJECT_COMPLIANCE = 1 / 1600;
+const GRAB_MAX_MOVE = 3;                 // max correction per substep (caps the force)
+const FINGER_R = 22, FINGER_MASS = 4, FINGER_ACCEL = 24000;
+const THROW_WINDOW = 90, MAX_THROW = 4200;
+
+const pointer = {
+  x: 0, y: 0, down: false, id: null, mode: null,
+  simX: 0, simY: 0, stepX0: 0, stepY0: 0, stepX1: 0, stepY1: 0, tx: 0, ty: 0,
+  hist: [],
+};
+const grab = {
+  n: 0, idx: new Int32Array(512), wt: new Float64Array(512), ox: new Float64Array(512), oy: new Float64Array(512),
+  compliance: 0, body: null, lx: 0, ly: 0,
+};
+let finger = null;
+let grabModeUI = 'pinch';
+
+function toWorld(e) { return { x: e.clientX / world.scale, y: e.clientY / world.scale }; }
+
+function pushHistory(x, y) {
+  const t = performance.now(), h = pointer.hist;
+  h.push({ t, x, y });
+  while (h.length > 2 && t - h[0].t > 250) h.shift();
+}
+
+function throwVelocity() {
+  const h = pointer.hist, now = performance.now();
+  if (h.length < 2 || now - h[h.length - 1].t > 70) return { x: 0, y: 0 };
+  let i0 = h.length - 1;
+  while (i0 > 0 && now - h[i0 - 1].t <= THROW_WINDOW) i0--;
+  const a = h[i0], b = h[h.length - 1], dt = (b.t - a.t) / 1000;
+  if (dt < 0.008) return { x: 0, y: 0 };
+  let vx = (b.x - a.x) / dt, vy = (b.y - a.y) / dt;
+  const sp = Math.hypot(vx, vy);
+  if (sp > MAX_THROW) { vx *= MAX_THROW / sp; vy *= MAX_THROW / sp; }
+  return { x: vx, y: vy };
+}
+
+function hitBody(b, x, y) {
+  b.updateWorld();
+  for (const p of b.parts) {
+    if (p.type === 0) { if ((x - p.wx) ** 2 + (y - p.wy) ** 2 < (p.r + 5) ** 2) return true; }
+    else {
+      let inside = true;
+      for (let k = 0; k < p.n; k++) {
+        if ((x - p.wv[2 * k]) * p.wn[2 * k] + (y - p.wv[2 * k + 1]) * p.wn[2 * k + 1] > 5) { inside = false; break; }
+      }
+      if (inside) return true;
+    }
+  }
+  return false;
+}
+
+function pickObject(x, y) {
+  for (let k = bodies.length - 1; k >= 0; k--) {
+    const b = bodies[k];
+    if (b.kind !== 'finger' && hitBody(b, x, y)) return b;
+  }
+  return null;
+}
+
+function overButter(x, y) {
+  butterBounds();
+  if (pointInButter(x, y)) return true;
+  nearestButterEdge(x, y);
+  return nearD2 < 7 * 7;
+}
+
+function beginInteraction(x, y, invert) {
+  pointer.simX = pointer.stepX0 = pointer.stepX1 = pointer.tx = x;
+  pointer.simY = pointer.stepY0 = pointer.stepY1 = pointer.ty = y;
+  const obj = pickObject(x, y);
+  if (obj) { beginObjectGrab(obj, x, y); return; }
+  if (overButter(x, y)) {
+    const whole = (grabModeUI === 'whole') !== !!invert;
+    beginButterGrab(x, y, whole);
+    return;
+  }
+  beginFinger(x, y);
+}
+
+function beginObjectGrab(b, x, y) {
+  pointer.mode = 'object';
+  grab.body = b; b.held = true;
+  const dx = x - b.x, dy = y - b.y, c = Math.cos(-b.a), s = Math.sin(-b.a);
+  grab.lx = c * dx - s * dy; grab.ly = s * dx + c * dy;
+  // bring to front
+  const k = bodies.indexOf(b);
+  if (k >= 0) { bodies.splice(k, 1); bodies.splice(finger ? bodies.length - 1 : bodies.length, 0, b); }
+}
+
+function beginButterGrab(x, y, whole) {
+  pointer.mode = whole ? 'whole' : 'pinch';
+  grab.n = 0;
+  const n = butter.n;
+  if (!whole) {
+    const R = PINCH_RADIUS;
+    for (let i = 0; i < n && grab.n < 512; i++) {
+      const d = Math.hypot(BX[i] - x, BY[i] - y);
+      if (d < R) { const u = 1 - (d / R) * (d / R); addGrab(i, u * u, x, y); }
+    }
+    grab.compliance = PINCH_COMPLIANCE;
+  } else {
+    // firm grip of the core (around the centre of mass), anchored at the click point
+    const cx = butter.cx, cy = butter.cy, R = WHOLE_RADIUS;
+    for (let i = 0; i < n && grab.n < 512; i++) {
+      const d = Math.hypot(BX[i] - cx, BY[i] - cy);
+      if (d < R) { const u = 1 - (d / R) * (d / R); addGrab(i, u * u, x, y); }
+    }
+    grab.compliance = WHOLE_COMPLIANCE;
+  }
+  if (grab.n === 0) {                     // fall back to the nearest particle
+    let bi = 0, bd = Infinity;
+    for (let i = 0; i < n; i++) { const d = (BX[i] - x) ** 2 + (BY[i] - y) ** 2; if (d < bd) { bd = d; bi = i; } }
+    addGrab(bi, 1, x, y);
+  }
+}
+function addGrab(i, w, x, y) {
+  const k = grab.n++;
+  grab.idx[k] = i; grab.wt[k] = w; grab.ox[k] = BX[i] - x; grab.oy[k] = BY[i] - y;
+}
+
+function beginFinger(x, y) {
+  pointer.mode = 'finger';
+  finger = buildBody('finger', [{ shape: 'circle', x: 0, y: 0, r: 6, m: FINGER_MASS }],
+    { restitution: 0, friction: 0.9, noRotation: true });
+  finger.noGravity = true;
+  finger.x = finger.px = finger.sx = x; finger.y = finger.py = finger.sy = y;
+  finger.updateWorld();
+  bodies.push(finger);
+}
+
+function endInteraction() {
+  const v = throwVelocity();
+  const mode = pointer.mode;
+  if (mode === 'object' && grab.body) {
+    const b = grab.body;
+    b.held = false;
+    b.vx = lerp(b.vx, v.x, 0.6); b.vy = lerp(b.vy, v.y, 0.6);
+  } else if (mode === 'whole') {
+    let vx = 0, vy = 0;
+    for (let i = 0; i < butter.n; i++) { vx += BVX[i]; vy += BVY[i]; }
+    vx /= butter.n; vy /= butter.n;
+    const dx = (v.x - vx) * 0.7, dy = (v.y - vy) * 0.7;
+    for (let i = 0; i < butter.n; i++) { BVX[i] += dx; BVY[i] += dy; }
+  } else if (mode === 'pinch') {
+    for (let k = 0; k < grab.n; k++) {
+      const i = grab.idx[k], f = 0.45 * grab.wt[k];
+      BVX[i] += (v.x - BVX[i]) * f; BVY[i] += (v.y - BVY[i]) * f;
+    }
+  } else if (mode === 'finger' && finger) {
+    const k = bodies.indexOf(finger);
+    if (k >= 0) bodies.splice(k, 1);
+    finger = null;
+  }
+  pointer.mode = null; grab.n = 0; grab.body = null;
+}
+
+// Soft XPBD springs from the grabbed particles to the (interpolated) cursor.
+function solveGrab(h) {
+  const tx = pointer.tx, ty = pointer.ty, ih2 = 1 / (h * h);
+  if (pointer.mode === 'pinch' || pointer.mode === 'whole') {
+    for (let k = 0; k < grab.n; k++) {
+      const i = grab.idx[k];
+      const dx = tx + grab.ox[k] - BX[i], dy = ty + grab.oy[k] - BY[i];
+      const f = BW[i] / (BW[i] + grab.compliance / grab.wt[k] * ih2);
+      let mx = dx * f, my = dy * f;
+      const m = Math.hypot(mx, my);
+      if (m > GRAB_MAX_MOVE) { mx *= GRAB_MAX_MOVE / m; my *= GRAB_MAX_MOVE / m; }
+      BX[i] += mx; BY[i] += my;
+    }
+  } else if (pointer.mode === 'object' && grab.body) {
+    const b = grab.body, c = Math.cos(b.a), s = Math.sin(b.a);
+    const rx = c * grab.lx - s * grab.ly, ry = s * grab.lx + c * grab.ly;
+    const dx = tx - (b.x + rx), dy = ty - (b.y + ry), d = Math.hypot(dx, dy);
+    if (d < 1e-6) return;
+    const nx = dx / d, ny = dy / d, rn = rx * ny - ry * nx;
+    const w = b.invM + b.invI * rn * rn;
+    let dl = d / (w + OBJECT_COMPLIANCE * ih2);
+    const maxDl = GRAB_MAX_MOVE * 1.5 / (b.invM + 1e-9);
+    if (dl > maxDl) dl = maxDl;
+    b.x += nx * dl * b.invM; b.y += ny * dl * b.invM; b.a += b.invI * rn * dl;
+  }
+}
+
+// Velocity damping toward the cursor's motion so held things don't oscillate forever.
+function grabDamping(dt) {
+  const tvx = (pointer.stepX1 - pointer.stepX0) / dt, tvy = (pointer.stepY1 - pointer.stepY0) / dt;
+  if (pointer.mode === 'pinch' || pointer.mode === 'whole') {
+    const base = 1 - Math.exp(-(pointer.mode === 'whole' ? 7 : 9) * dt);
+    for (let k = 0; k < grab.n; k++) {
+      const i = grab.idx[k], f = base * grab.wt[k];
+      BVX[i] += (tvx - BVX[i]) * f; BVY[i] += (tvy - BVY[i]) * f;
+    }
+  } else if (pointer.mode === 'object' && grab.body) {
+    const b = grab.body, f = 1 - Math.exp(-5 * dt);
+    b.vx += (tvx - b.vx) * f; b.vy += (tvy - b.vy) * f; b.w *= Math.exp(-2.5 * dt);
+  }
+}
+
+// The finger is a dynamic, force-limited body that chases the cursor:
+// it can press hard, but the butter and the floor can still push back.
+function driveFinger(h) {
+  const f = finger, p = f.parts[0];
+  if (p.r < FINGER_R) { p.r = Math.min(FINGER_R, p.r + 260 * h); f.radius = p.r; }
+  let vx = (pointer.tx - f.x) / 0.025, vy = (pointer.ty - f.y) / 0.025;
+  const sp = Math.hypot(vx, vy);
+  if (sp > 3500) { vx *= 3500 / sp; vy *= 3500 / sp; }
+  let ax = vx - f.vx, ay = vy - f.vy;
+  const am = Math.hypot(ax, ay), lim = FINGER_ACCEL * h;
+  if (am > lim) { ax *= lim / am; ay *= lim / am; }
+  f.vx += ax; f.vy += ay;
+}
+
+/* =========================================================================
+   5. OBJECT SPAWNING
+   ========================================================================= */
+
+const MAX_OBJECTS = 24;
+const OBJECT_DEFS = {
+  small:  () => buildBody('small', [{ shape: 'circle', x: 0, y: 0, r: 15, m: 0.25 }], { restitution: 0.45, friction: 0.5 }),
+  metal:  () => buildBody('metal', [{ shape: 'circle', x: 0, y: 0, r: 27, m: 8 }], { restitution: 0.1, friction: 0.35 }),
+  cube:   () => buildBody('cube', [{ shape: 'box', x: 0, y: 0, hw: 23, hh: 23, m: 1.2 }], { restitution: 0.18, friction: 0.6 }),
+  rubber: () => buildBody('rubber', [{ shape: 'circle', x: 0, y: 0, r: 21, m: 0.5 }], { restitution: 0.88, friction: 0.85 }),
+  hammer: () => buildBody('hammer', [
+    { shape: 'box', x: -10, y: 0, hw: 62, hh: 6.5, m: 0.6 },   // wooden handle
+    { shape: 'box', x: 62, y: 0, hw: 15, hh: 30, m: 3.2 },     // steel head
+  ], { restitution: 0.12, friction: 0.5 }),
+};
+const SPAWN_KEYS = ['small', 'metal', 'cube', 'rubber', 'hammer'];
+
+const bodies = [];   // all rigid bodies (objects + finger while poking)
+
+function spawnObject(kind, x, y, vx = 0, vy = 0) {
+  const b = OBJECT_DEFS[kind]();
+  b.x = clamp(x, b.radius, world.w - b.radius);
+  b.y = clamp(y, b.radius, world.floorY - b.radius);
+  b.a = kind === 'hammer' ? (Math.random() - 0.5) * 1.2 : Math.random() * TAU;
+  b.vx = vx; b.vy = vy; b.w = (Math.random() - 0.5) * 5;
+  b.px = b.sx = b.x; b.py = b.sy = b.y; b.pa = b.sa = b.a;
+  b.updateWorld();
+  bodies.splice(finger ? bodies.length - 1 : bodies.length, 0, b);
+  // keep the scene light: remove the oldest objects that aren't being held
+  let count = bodies.filter(o => o.kind !== 'finger').length;
+  for (let k = 0; k < bodies.length && count > MAX_OBJECTS; k++) {
+    if (bodies[k].kind !== 'finger' && !bodies[k].held && bodies[k] !== b) { bodies.splice(k, 1); k--; count--; }
+  }
+  return b;
+}
+
+function dropObject(kind) {        // drop from above the butter
+  const x = butter.cx + (Math.random() - 0.5) * 240;
+  return spawnObject(kind, x, Math.max(60, Math.min(110, world.floorY - 380)), 0, 0);
+}
+
+function clearObjects() {
+  if (pointer.mode === 'object') endInteraction();
+  for (let k = bodies.length - 1; k >= 0; k--) if (bodies[k].kind !== 'finger') bodies.splice(k, 1);
+}
+
+/* ---------- simulation step (ties sections 1–5 together) ---------- */
+
+let shake = 0;
+function step(dt) {
+  const h = dt / SUBSTEPS, g = gravity(), n = butter.n;
+  deriveParams();
+  BSX.set(BX); BSY.set(BY);
+  for (const b of bodies) { b.sx = b.x; b.sy = b.y; b.sa = b.a; b.svx = b.vx; b.svy = b.vy; }
+  const bvx0 = butter.vcx, bvy0 = butter.vcy;
+
+  for (let s = 0; s < SUBSTEPS; s++) {
+    const f = (s + 1) / SUBSTEPS;
+    pointer.tx = lerp(pointer.stepX0, pointer.stepX1, f);
+    pointer.ty = lerp(pointer.stepY0, pointer.stepY1, f);
+    if (finger) driveFinger(h);
+
+    // predict
+    for (let i = 0; i < n; i++) {
+      BVY[i] += g * h;
+      BPX[i] = BX[i]; BPY[i] = BY[i];
+      BX[i] += BVX[i] * h; BY[i] += BVY[i] * h;
+    }
+    for (const b of bodies) {
+      if (!b.noGravity) b.vy += g * h;
+      b.px = b.x; b.py = b.y; b.pa = b.a;
+      b.x += b.vx * h; b.y += b.vy * h; b.a += b.w * h;
+    }
+
+    // constraints
+    if (pointer.mode) solveGrab(h);
+    butterShapeMatch();
+    butterEdges(h);
+    butterCurvature();
+    butterTris(h);
+    butterArea(h);
+    solveCollisions();
+    collideButterWorld(h);
+
+    // velocities from positions (+ clamps against explosions)
+    const ih = 1 / h, maxV2 = MAX_PARTICLE_SPEED * MAX_PARTICLE_SPEED;
+    for (let i = 0; i < n; i++) {
+      let vx = (BX[i] - BPX[i]) * ih, vy = (BY[i] - BPY[i]) * ih;
+      const v2 = vx * vx + vy * vy;
+      if (v2 > maxV2) { const k = MAX_PARTICLE_SPEED / Math.sqrt(v2); vx *= k; vy *= k; }
+      BVX[i] = vx; BVY[i] = vy;
+    }
+    for (const b of bodies) {
+      b.vx = (b.x - b.px) * ih; b.vy = (b.y - b.py) * ih; b.w = (b.a - b.pa) * ih;
+      const sp = Math.hypot(b.vx, b.vy);
+      if (sp > MAX_BODY_SPEED) { b.vx *= MAX_BODY_SPEED / sp; b.vy *= MAX_BODY_SPEED / sp; }
+      b.w = clamp(b.w, -MAX_BODY_SPIN, MAX_BODY_SPIN);
+    }
+    solveBounces();
+  }
+
+  dampButter(dt);
+  if (pointer.mode) grabDamping(dt);
+  for (const b of bodies) {
+    if (b.kind === 'finger') continue;
+    const ld = Math.exp(-0.03 * dt); b.vx *= ld; b.vy *= ld;
+    b.w *= Math.exp(-(b.onButter ? 7 : 0.4) * dt);          // butter is tacky: things don't roll freely on it
+    if (b.onButter && !b.held) {
+      // viscous sinking: objects resting in the butter don't bob on it like on a spring
+      const f = 1 - Math.exp(-tune.sink * dt);
+      b.vx += (butter.vcx - b.vx) * f; b.vy += (butter.vcy - b.vy) * f;
+    }
+    b.onButter = false;
+  }
+  // tangle watchdog: if parts of the mesh stay inverted or the outline crosses itself,
+  // ramp up shape memory until it has unfolded (gently while the user is holding it)
+  if (butter.inverted > 0 || outlineCrosses()) butter.tangleTime += dt; else butter.tangleTime = 0;
+  butter.inverted = 0;
+  const held = pointer.mode === 'pinch' || pointer.mode === 'whole';
+  butter.smBoost = butter.tangleTime > 0.2
+    ? Math.min(held ? 0.004 : 0.03, butter.smBoost * 1.15 + 2e-5)
+    : butter.smBoost * 0.85;
+  // a tangle that survives this long is jammed by the stiff limits: relax them and let
+  // shape memory pull it straight
+  butter.rescue = !held && butter.tangleTime > 0.4;
+  updatePlasticity(dt);
+  measureSquash();
+
+  // only very heavy impacts (momentum change within one step) → a little screen shake
+  const SHAKE_J = 6500;
+  for (const b of bodies) {
+    if (b.held || b.kind === 'finger') continue;
+    const J = b.m * Math.hypot(b.vx - b.svx, b.vy - b.svy);
+    if (J > SHAKE_J) shake = Math.max(shake, Math.min(1, (J - SHAKE_J) / 9000) * 9);
+  }
+  if (!pointer.mode || pointer.mode === 'object') {
+    const J = params.mass * Math.hypot(butter.vcx - bvx0, butter.vcy - bvy0);
+    if (J > SHAKE_J) shake = Math.max(shake, Math.min(1, (J - SHAKE_J) / 9000) * 9);
+  }
+
+  // safety net: if anything went non-finite, put it back together
+  if (!isFinite(butter.cx) || !isFinite(butter.cy)) resetButter();
+  for (let k = bodies.length - 1; k >= 0; k--) {
+    const b = bodies[k];
+    if (!isFinite(b.x) || !isFinite(b.y) || !isFinite(b.a)) {
+      if (b === grab.body) endInteraction();
+      if (b === finger) finger = null;
+      bodies.splice(k, 1);
+    }
+  }
+}
+
+function resetButter() {
+  if (pointer.mode === 'pinch' || pointer.mode === 'whole') endInteraction();
+  placeButter(world.w / 2, world.floorY - HALF_H - 70);
+}
+
+function resetAll() {
+  if (pointer.mode) endInteraction();
+  clearObjects();
+  resetButter();
+}
+
+/* =========================================================================
+   6. RENDERING
+   ========================================================================= */
+
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+const LIGHT_ANGLE = Math.atan2(-0.84, -0.55);   // light from the upper left
+
+function smoothClosedPath(xs, ys, n, ox = 0) {  // closed Catmull–Rom spline through points (optionally shifted by ox)
+  ctx.moveTo(xs[0] + ox, ys[0]);
+  for (let i = 0; i < n; i++) {
+    const i0 = (i - 1 + n) % n, i2 = (i + 1) % n, i3 = (i + 2) % n;
+    ctx.bezierCurveTo(
+      xs[i] + (xs[i2] - xs[i0]) / 6 + ox, ys[i] + (ys[i2] - ys[i0]) / 6,
+      xs[i2] - (xs[i3] - xs[i]) / 6 + ox, ys[i2] - (ys[i3] - ys[i]) / 6,
+      xs[i2] + ox, ys[i2]);
+  }
+  ctx.closePath();
+}
+
+function rrect(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Map a rest-space point onto the deformed butter (barycentric in the rest mesh).
+let mapX = 0, mapY = 0;
+function mapRest(qx, qy) {
+  const G = butter.grid, T = butter.tris, X = butter.restX, Y = butter.restY;
+  const c = clamp(Math.floor((qx - G.x0) / G.cs), 0, G.cols - 1), r = clamp(Math.floor((qy - G.y0) / G.cs), 0, G.rows - 1);
+  for (const k of G.cells[r * G.cols + c]) {
+    const a = T[3 * k], b = T[3 * k + 1], d = T[3 * k + 2];
+    const x0 = X[a], y0 = Y[a], x1 = X[b], y1 = Y[b], x2 = X[d], y2 = Y[d];
+    const det = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
+    const l0 = ((y1 - y2) * (qx - x2) + (x2 - x1) * (qy - y2)) / det;
+    const l1 = ((y2 - y0) * (qx - x2) + (x0 - x2) * (qy - y2)) / det;
+    const l2 = 1 - l0 - l1;
+    if (l0 >= -1e-4 && l1 >= -1e-4 && l2 >= -1e-4) {
+      mapX = l0 * RX[a] + l1 * RX[b] + l2 * RX[d];
+      mapY = l0 * RY[a] + l1 * RY[b] + l2 * RY[d];
+      return;
+    }
+  }
+  // fallback: nearest particle + rotated offset
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < butter.n; i++) { const d = (X[i] - qx) ** 2 + (Y[i] - qy) ** 2; if (d < bd) { bd = d; bi = i; } }
+  const ca = Math.cos(butter.angle), sa = Math.sin(butter.angle), ox = qx - X[bi], oy = qy - Y[bi];
+  mapX = RX[bi] + ca * ox - sa * oy; mapY = RY[bi] + sa * ox + ca * oy;
+}
+
+// Soft-edged fills using the shadow-blur trick (works everywhere, no ctx.filter):
+// the shape is drawn far off-screen and only its blurred shadow lands in view.
+const SOFT_OFF = 5000;
+function beginSoft(color, blur, dx = 0, dy = 0) {
+  const k = world.scale * world.dpr;
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = blur * k;
+  ctx.shadowOffsetX = (SOFT_OFF + dx) * k;
+  ctx.shadowOffsetY = dy * k;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+}
+function softFill(xs, ys, n, color, blur) {
+  beginSoft(color, blur);
+  smoothClosedPath(xs, ys, n, -SOFT_OFF);
+  ctx.fill();
+  ctx.restore();
+}
+// Inner shadow / inner light along the butter outline (call while clipped to it).
+function innerGlow(minX, minY, maxX, maxY, color, blur, dx, dy) {
+  const m = blur * 3 + 20;
+  beginSoft(color, blur, dx, dy);
+  ctx.rect(minX - m - SOFT_OFF, minY - m, maxX - minX + 2 * m, maxY - minY + 2 * m);
+  smoothClosedPath(RX, RY, butter.nb, -SOFT_OFF);
+  ctx.fill('evenodd');
+  ctx.restore();
+}
+
+function drawFloorShadow(cx, halfW, gap, strength) {
+  if (gap > 420 || halfW <= 0) return;
+  const t = clamp(gap / 420, 0, 1), alpha = strength * (1 - t) * (1 - t);
+  const rx = halfW * (1 + t * 0.5), ry = Math.max(5, halfW * 0.1) * (1 + t * 0.8);
+  ctx.save();
+  ctx.translate(cx, world.floorY + 2);
+  ctx.scale(1, ry / rx);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+  g.addColorStop(0, `rgba(80,58,25,${alpha})`);
+  g.addColorStop(0.55, `rgba(80,58,25,${alpha * 0.55})`);
+  g.addColorStop(1, 'rgba(80,58,25,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, rx, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+function drawBackground() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  g.addColorStop(0, '#f2eee7'); g.addColorStop(1, '#e6e0d6');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawFloor() {
+  const y = world.floorY;
+  const g = ctx.createLinearGradient(0, y, 0, world.h + 40);
+  g.addColorStop(0, '#dcd4c6'); g.addColorStop(1, '#d1c8b8');
+  ctx.fillStyle = g;
+  ctx.fillRect(-60, y, world.w + 120, world.h - y + 80);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.fillRect(-60, y + 1.5, world.w + 120, 1.2);
+  ctx.strokeStyle = '#c4b9a6'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-60, y); ctx.lineTo(world.w + 60, y); ctx.stroke();
+}
+
+const hlX = [], hlY = [];
+function drawButter(alpha) {
+  const n = butter.n, nb = butter.nb;
+  for (let i = 0; i < n; i++) { RX[i] = BSX[i] + (BX[i] - BSX[i]) * alpha; RY[i] = BSY[i] + (BY[i] - BSY[i]) * alpha; }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, cMin = Infinity, cMax = -Infinity;
+  for (let i = 0; i < nb; i++) {
+    const x = RX[i], y = RY[i];
+    if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (y > world.floorY - 4) { if (x < cMin) cMin = x; if (x > cMax) cMax = x; }
+  }
+  const w = maxX - minX, h = maxY - minY;
+
+  // shadows: soft ambient shadow + darker contact patch
+  drawFloorShadow((minX + maxX) / 2, w * 0.5 + 10, world.floorY - maxY, 0.3);
+  if (cMax > cMin) {
+    ctx.save();
+    const cx = (cMin + cMax) / 2, rx = (cMax - cMin) / 2 + 10;
+    ctx.translate(cx, world.floorY + 1); ctx.scale(1, 4 / rx);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+    g.addColorStop(0, 'rgba(70,48,15,0.28)'); g.addColorStop(0.7, 'rgba(70,48,15,0.14)'); g.addColorStop(1, 'rgba(70,48,15,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, rx, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  // body
+  ctx.beginPath();
+  smoothClosedPath(RX, RY, nb);
+  const base = ctx.createLinearGradient(0, minY, 0, maxY);
+  base.addColorStop(0, '#fde68f'); base.addColorStop(0.5, '#f8d561'); base.addColorStop(1, '#ecba45');
+  ctx.fillStyle = base;
+  ctx.fill();
+
+  ctx.save();
+  ctx.clip();
+  // soft directional light
+  const R = Math.max(w, h);
+  const lx = minX + w * 0.3, ly = minY + h * 0.22;
+  const rg = ctx.createRadialGradient(lx, ly, R * 0.04, lx, ly, R * 0.95);
+  rg.addColorStop(0, 'rgba(255,252,232,0.42)');
+  rg.addColorStop(0.45, 'rgba(255,246,205,0.08)');
+  rg.addColorStop(1, 'rgba(196,124,22,0.22)');
+  ctx.fillStyle = rg;
+  ctx.fillRect(minX - 10, minY - 10, w + 20, h + 20);
+  // soft darker rim (deeper on the shadow side) and a faint lit rim on the light side
+  innerGlow(minX, minY, maxX, maxY, 'rgba(186,112,14,0.5)', 15, -3, -5);
+  innerGlow(minX, minY, maxX, maxY, 'rgba(255,248,215,0.55)', 5, 2.5, 3.5);
+  // highlights attached to the material: they stretch, squash and wobble with the body
+  const phi = LIGHT_ANGLE - butter.angle, span = 0.72, N = 10;
+  hlX.length = hlY.length = 0;
+  for (let k = 0; k <= N; k++) {
+    const u = k / N, a = phi - span + 2 * span * u, r = outlineRadius(a) - 10;
+    mapRest(r * Math.cos(a), r * Math.sin(a)); hlX.push(mapX); hlY.push(mapY);
+  }
+  for (let k = N - 1; k >= 1; k--) {
+    const u = k / N, a = phi - span + 2 * span * u, r = outlineRadius(a) - 10 - 24 * Math.pow(Math.sin(Math.PI * u), 0.7);
+    mapRest(r * Math.cos(a), r * Math.sin(a)); hlX.push(mapX); hlY.push(mapY);
+  }
+  softFill(hlX, hlY, hlX.length, 'rgba(255,253,240,0.6)', 9);
+  hlX.length = hlY.length = 0;
+  const sa = phi + 0.2, sr = outlineRadius(sa) - 24, scx = sr * Math.cos(sa), scy = sr * Math.sin(sa);
+  for (let k = 0; k < 8; k++) {
+    const a = k / 8 * TAU, tx = -Math.sin(sa), ty = Math.cos(sa);
+    const ox = Math.cos(a) * 9, oy = Math.sin(a) * 4.5;       // ellipse along the outline tangent
+    mapRest(scx + tx * ox + Math.cos(sa) * oy, scy + ty * ox + Math.sin(sa) * oy);
+    hlX.push(mapX); hlY.push(mapY);
+  }
+  softFill(hlX, hlY, hlX.length, 'rgba(255,255,255,0.9)', 3.5);
+  ctx.restore();
+
+  // outline
+  ctx.beginPath();
+  smoothClosedPath(RX, RY, nb);
+  ctx.strokeStyle = 'rgba(176,112,22,0.88)';
+  ctx.lineWidth = 2.2;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+
+function bodyPose(b, alpha) {
+  return { x: lerp(b.sx, b.x, alpha), y: lerp(b.sy, b.y, alpha), a: lerp(b.sa, b.a, alpha) };
+}
+
+function drawObjectShadow(b, alpha) {
+  const p = bodyPose(b, alpha);
+  const bottom = p.y + (b.kind === 'hammer' ? 20 : b.radius);
+  drawFloorShadow(p.x, b.radius * (b.kind === 'hammer' ? 0.85 : 0.9), world.floorY - bottom, b.kind === 'metal' ? 0.32 : 0.24);
+}
+
+function shadeSphere(r, light, mid, dark) {
+  const g = ctx.createRadialGradient(-r * 0.35, -r * 0.42, r * 0.08, 0, 0, r * 1.05);
+  g.addColorStop(0, light); g.addColorStop(0.55, mid); g.addColorStop(1, dark);
+  return g;
+}
+
+function drawObject(b, alpha) {
+  const { x, y, a } = bodyPose(b, alpha);
+  ctx.save();
+  ctx.translate(x, y);
+  switch (b.kind) {
+    case 'small': {
+      const r = b.parts[0].r;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU);
+      ctx.fillStyle = shadeSphere(r, '#b6d1f6', '#729ee2', '#4a70b2'); ctx.fill();
+      ctx.save(); ctx.clip(); ctx.rotate(a);
+      ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.7;
+      ctx.beginPath(); ctx.arc(-r * 1.15, 0, r * 0.82, -0.95, 0.95); ctx.stroke();
+      ctx.beginPath(); ctx.arc(r * 1.15, 0, r * 0.82, Math.PI - 0.95, Math.PI + 0.95); ctx.stroke();
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(35,55,95,0.5)'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath(); ctx.ellipse(-r * 0.38, -r * 0.46, r * 0.28, r * 0.16, -0.6, 0, TAU); ctx.fill();
+      break;
+    }
+    case 'rubber': {
+      const r = b.parts[0].r;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU);
+      ctx.fillStyle = '#e2564e'; ctx.fill();
+      ctx.save(); ctx.clip(); ctx.rotate(a);
+      ctx.fillStyle = '#f4e4c4'; ctx.fillRect(-r, -r * 0.24, 2 * r, r * 0.48);
+      ctx.restore();
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU);
+      const g = ctx.createRadialGradient(-r * 0.35, -r * 0.42, r * 0.1, 0, 0, r * 1.05);
+      g.addColorStop(0, 'rgba(255,240,230,0.35)'); g.addColorStop(0.5, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(90,10,10,0.32)');
+      ctx.fillStyle = g; ctx.fill();
+      ctx.strokeStyle = 'rgba(110,25,20,0.55)'; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.beginPath(); ctx.ellipse(-r * 0.38, -r * 0.46, r * 0.26, r * 0.15, -0.6, 0, TAU); ctx.fill();
+      break;
+    }
+    case 'metal': {
+      const r = b.parts[0].r;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU);
+      const g = ctx.createRadialGradient(-r * 0.35, -r * 0.42, r * 0.05, 0, 0, r * 1.05);
+      g.addColorStop(0, '#fbfcfd'); g.addColorStop(0.3, '#c9ced5'); g.addColorStop(0.72, '#7f8791'); g.addColorStop(1, '#4b525c');
+      ctx.fillStyle = g; ctx.fill();
+      ctx.save(); ctx.clip();
+      ctx.fillStyle = 'rgba(222,196,150,0.22)';            // warm floor reflection
+      ctx.beginPath(); ctx.ellipse(0, r * 0.82, r * 0.95, r * 0.42, 0, 0, TAU); ctx.fill();
+      ctx.rotate(a);                                        // faint machining line shows the spin
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.62, -0.5, 0.9); ctx.stroke();
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(40,45,52,0.6)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.ellipse(-r * 0.36, -r * 0.44, r * 0.18, r * 0.11, -0.6, 0, TAU); ctx.fill();
+      break;
+    }
+    case 'cube': {
+      ctx.rotate(a);
+      const s = 23;
+      ctx.beginPath(); rrect(-s, -s, 2 * s, 2 * s, 6);
+      const g = ctx.createLinearGradient(-s, -s, s, s);
+      g.addColorStop(0, '#f2a789'); g.addColorStop(1, '#d76f4e');
+      ctx.fillStyle = g; ctx.fill();
+      ctx.strokeStyle = 'rgba(115,48,28,0.6)'; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.beginPath(); rrect(-s + 6.5, -s + 6.5, 2 * s - 13, 2 * s - 13, 4);
+      ctx.strokeStyle = 'rgba(255,240,230,0.45)'; ctx.lineWidth = 1.8; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.beginPath(); rrect(-s + 3, -s + 3, 2 * s - 6, 5, 2.5); ctx.fill();
+      break;
+    }
+    case 'hammer': {
+      ctx.rotate(a);
+      ctx.translate(-b.comX, -b.comY);
+      // handle
+      ctx.beginPath(); rrect(-72, -6.5, 124, 13, 6);
+      const hg = ctx.createLinearGradient(0, -6.5, 0, 6.5);
+      hg.addColorStop(0, '#ddab74'); hg.addColorStop(1, '#a66d3c');
+      ctx.fillStyle = hg; ctx.fill();
+      ctx.strokeStyle = 'rgba(90,50,20,0.55)'; ctx.lineWidth = 1.3; ctx.stroke();
+      // rubber grip
+      ctx.beginPath(); rrect(-73, -7.5, 40, 15, 7);
+      ctx.fillStyle = '#5e4b3d'; ctx.fill();
+      ctx.strokeStyle = 'rgba(30,20,15,0.5)'; ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.13)'; ctx.lineWidth = 1.5;
+      for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(-65 + k * 8, -6); ctx.lineTo(-65 + k * 8, 6); ctx.stroke(); }
+      // steel head
+      ctx.beginPath(); rrect(47, -30, 30, 60, 5);
+      const sg = ctx.createLinearGradient(47, 0, 77, 0);
+      sg.addColorStop(0, '#a3abb5'); sg.addColorStop(0.45, '#7d858f'); sg.addColorStop(1, '#5a616b');
+      ctx.fillStyle = sg; ctx.fill();
+      ctx.strokeStyle = 'rgba(30,34,40,0.6)'; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.fillStyle = '#bcc3cb';
+      ctx.beginPath(); rrect(48.5, -29, 27, 6, 3); ctx.fill();
+      ctx.fillStyle = 'rgba(40,44,50,0.35)';
+      ctx.beginPath(); rrect(48.5, 23, 27, 6, 3); ctx.fill();
+      ctx.fillStyle = '#4f565f';
+      ctx.fillRect(44, -8.5, 4, 17);
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function drawInteraction(alpha) {
+  if (!pointer.down) return;
+  const px = pointer.x, py = pointer.y;
+  if (pointer.mode === 'finger' && finger) {
+    const p = bodyPose(finger, alpha), r = finger.parts[0].r;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU);
+    ctx.fillStyle = 'rgba(95,78,55,0.12)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(95,78,55,0.4)'; ctx.lineWidth = 1.5; ctx.stroke();
+    return;
+  }
+  let gx = 0, gy = 0;
+  if (pointer.mode === 'pinch' || pointer.mode === 'whole') {
+    let sw = 0;
+    for (let k = 0; k < grab.n; k++) { const i = grab.idx[k], w = grab.wt[k]; gx += (RX[i] - grab.ox[k]) * w; gy += (RY[i] - grab.oy[k]) * w; sw += w; }
+    gx /= sw; gy /= sw;
+  } else if (pointer.mode === 'object' && grab.body) {
+    const b = grab.body, p = bodyPose(b, alpha), c = Math.cos(p.a), s = Math.sin(p.a);
+    gx = p.x + c * grab.lx - s * grab.ly; gy = p.y + s * grab.lx + c * grab.ly;
+  } else return;
+  ctx.strokeStyle = 'rgba(80,62,35,0.45)'; ctx.lineWidth = 1.3;
+  if (Math.hypot(gx - px, gy - py) > 3) { ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(px, py); ctx.stroke(); }
+  ctx.beginPath(); ctx.arc(px, py, 4.5, 0, TAU);
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(gx, gy, 2.2, 0, TAU); ctx.fillStyle = 'rgba(80,62,35,0.5)'; ctx.fill();
+}
+
+let shakeX = 0, shakeY = 0, shakeT = 0;
+function updateShake(dt) {
+  shake *= Math.exp(-11 * dt);
+  if (shake < 0.05) { shake = 0; shakeX = shakeY = 0; return; }
+  shakeT += dt;
+  shakeX = shake * Math.sin(shakeT * 83) * 0.8;
+  shakeY = shake * Math.cos(shakeT * 71);
+}
+
+function render(alpha) {
+  drawBackground();
+  const k = world.scale * world.dpr;
+  ctx.setTransform(k, 0, 0, k, shakeX * k, shakeY * k);
+  drawFloor();
+  for (const b of bodies) if (b.kind !== 'finger') drawObjectShadow(b, alpha);
+  drawButter(alpha);
+  for (const b of bodies) if (b.kind !== 'finger') drawObject(b, alpha);
+  drawInteraction(alpha);
+}
+
+/* =========================================================================
+   7. UI
+   Panel controls, pointer wiring, keyboard shortcuts, FPS counter,
+   resize handling and the fixed-timestep main loop.
+   ========================================================================= */
+
+const $ = id => document.getElementById(id);
+const panel = $('panel'), hintEl = $('hint'), fpsEl = $('fps');
+
+function hideHint() { hintEl.classList.add('gone'); }
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cw = window.innerWidth, ch = window.innerHeight;
+  canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
+  world.dpr = dpr;
+  world.scale = clamp(Math.min(cw / 620, ch / 720), 0.42, 2.2);
+  world.w = cw / world.scale; world.h = ch / world.scale;
+  world.floorY = world.h - clamp(world.h * 0.09, 40, 80);
+  if (!butter.n) return;
+  // keep everything inside the new bounds (shift whole bodies, no velocity spikes)
+  butterBounds();
+  let dx = 0, dy = 0;
+  if (bb.maxX > world.w - 2) dx = world.w - 2 - bb.maxX;
+  if (bb.minX + dx < 2) dx = 2 - bb.minX;
+  if (bb.maxY > world.floorY) dy = world.floorY - bb.maxY;
+  if (dx || dy) for (let i = 0; i < butter.n; i++) { BX[i] += dx; BPX[i] += dx; BSX[i] += dx; BY[i] += dy; BPY[i] += dy; BSY[i] += dy; }
+  for (const b of bodies) {
+    const nx = clamp(b.x, b.radius, Math.max(b.radius, world.w - b.radius)), ny = Math.min(b.y, world.floorY - b.radius);
+    b.sx += nx - b.x; b.sy += ny - b.y; b.px += nx - b.x; b.py += ny - b.y; b.x = nx; b.y = ny;
+  }
+}
+
+// ---- sliders ----
+const sliderDefs = [
+  ['softness', v => Math.round(v * 100) + '%'],
+  ['elasticity', v => Math.round(v * 100) + '%'],
+  ['damping', v => Math.round(v * 100) + '%'],
+  ['gravity', v => Math.round(v)],
+  ['mass', v => v.toFixed(1) + ' kg'],
+];
+for (const [key, fmt] of sliderDefs) {
+  const input = $(key), out = $(key + 'Out');
+  const sync = () => { params[key] = parseFloat(input.value); out.textContent = fmt(params[key]); };
+  input.addEventListener('input', sync);
+  sync();
+}
+
+// ---- buttons ----
+function setGravity(on) {
+  params.gravityOn = on;
+  $('gravityBtn').classList.toggle('on', on);
+}
+$('gravityBtn').addEventListener('click', () => setGravity(!params.gravityOn));
+$('resetBtn').addEventListener('click', resetAll);
+$('clearObjects').addEventListener('click', clearObjects);
+
+function toggleFullscreen() {
+  const d = document, el = d.documentElement;
+  if (!d.fullscreenElement && !d.webkitFullscreenElement) {
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) { const r = req.call(el); if (r && r.catch) r.catch(() => {}); }
+  } else {
+    const exit = d.exitFullscreen || d.webkitExitFullscreen;
+    if (exit) exit.call(d);
+  }
+}
+$('fullscreenBtn').addEventListener('click', toggleFullscreen);
+const syncFsLabel = () => {
+  $('fullscreenBtn').textContent = (document.fullscreenElement || document.webkitFullscreenElement) ? 'Exit fullscreen' : 'Fullscreen';
+};
+document.addEventListener('fullscreenchange', syncFsLabel);
+document.addEventListener('webkitfullscreenchange', syncFsLabel);
+
+function setPanelCollapsed(c) {
+  panel.classList.toggle('collapsed', c);
+  $('collapse').textContent = c ? '+' : '–';
+}
+$('collapse').addEventListener('click', () => setPanelCollapsed(!panel.classList.contains('collapsed')));
+
+const grabSeg = $('grabSeg');
+grabSeg.addEventListener('click', e => {
+  const btn = e.target.closest('button[data-mode]');
+  if (!btn) return;
+  grabModeUI = btn.dataset.mode;
+  for (const b of grabSeg.querySelectorAll('button')) b.classList.toggle('on', b === btn);
+});
+
+// Spawn buttons: click → drop from above; press and drag out → spawn in hand.
+let pendingSpawn = null;
+for (const btn of document.querySelectorAll('.spawn')) {
+  btn.addEventListener('pointerdown', e => {
+    if (pointer.down) return;
+    pendingSpawn = { kind: btn.dataset.kind, x: e.clientX, y: e.clientY, id: e.pointerId, btn };
+    hideHint();
+  });
+  btn.addEventListener('click', e => { if (e.detail === 0) dropObject(btn.dataset.kind); });   // keyboard activation
+}
+
+// ---- pointer on the canvas ----
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  if (pointer.down) return;
+  if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+  const p = toWorld(e);
+  pointer.down = true; pointer.id = e.pointerId; pointer.x = p.x; pointer.y = p.y;
+  pointer.hist.length = 0; pushHistory(p.x, p.y);
+  beginInteraction(p.x, p.y, e.button === 2 || e.shiftKey);
+  updateCursor();
+  hideHint();
+  e.preventDefault();
+});
+
+window.addEventListener('pointermove', e => {
+  if (pendingSpawn && e.pointerId === pendingSpawn.id && !pointer.down) {
+    const dx = e.clientX - pendingSpawn.x, dy = e.clientY - pendingSpawn.y;
+    const r = panel.getBoundingClientRect();
+    const outside = e.clientX > r.right || e.clientY > r.bottom || e.clientX < r.left || e.clientY < r.top;
+    if (Math.hypot(dx, dy) > 14 && outside) {       // dragged out of the panel: spawn it in the hand
+      const p = toWorld(e);
+      const b = spawnObject(pendingSpawn.kind, p.x, p.y);
+      pendingSpawn = null;
+      pointer.down = true; pointer.id = e.pointerId; pointer.x = p.x; pointer.y = p.y;
+      pointer.hist.length = 0; pushHistory(p.x, p.y);
+      pointer.simX = pointer.stepX0 = pointer.stepX1 = pointer.tx = p.x;
+      pointer.simY = pointer.stepY0 = pointer.stepY1 = pointer.ty = p.y;
+      beginObjectGrab(b, b.x, b.y);
+      updateCursor();
+    }
+    return;
+  }
+  const p = toWorld(e);
+  if (pointer.down && e.pointerId === pointer.id) {
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+    if (evs && evs.length > 1) for (const ce of evs) { const q = toWorld(ce); pushHistory(q.x, q.y); }
+    else pushHistory(p.x, p.y);
+    pointer.x = p.x; pointer.y = p.y;
+  } else if (!pointer.down) {
+    pointer.x = p.x; pointer.y = p.y;
+    updateCursor();
+  }
+});
+
+function pointerUp(e) {
+  if (pendingSpawn && e.pointerId === pendingSpawn.id) {
+    const r = pendingSpawn.btn.getBoundingClientRect();
+    if (e.type === 'pointerup' && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) dropObject(pendingSpawn.kind);
+    pendingSpawn = null;
+    return;
+  }
+  if (!pointer.down || e.pointerId !== pointer.id) return;
+  const p = toWorld(e);
+  if (e.type === 'pointerup') { pointer.x = p.x; pointer.y = p.y; }
+  endInteraction();
+  pointer.down = false; pointer.id = null;
+  updateCursor();
+}
+window.addEventListener('pointerup', pointerUp);
+window.addEventListener('pointercancel', pointerUp);
+window.addEventListener('blur', () => {
+  if (pointer.down) { endInteraction(); pointer.down = false; pointer.id = null; }
+  pendingSpawn = null;
+});
+
+function updateCursor() {
+  let c = 'default';
+  if (pointer.down) c = pointer.mode === 'finger' ? 'none' : 'grabbing';
+  else if (pickObject(pointer.x, pointer.y) || overButter(pointer.x, pointer.y)) c = 'grab';
+  if (canvas.style.cursor !== c) canvas.style.cursor = c;
+}
+
+// ---- keyboard ----
+window.addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
+  const k = e.key.toLowerCase();
+  if (k === 'r') resetAll();
+  else if (k === 'g') setGravity(!params.gravityOn);
+  else if (k === 'f') toggleFullscreen();
+  else if (k === 'h') setPanelCollapsed(!panel.classList.contains('collapsed'));
+  else if (k >= '1' && k <= '5') dropObject(SPAWN_KEYS[+k - 1]);
+  else return;
+  hideHint();
+});
+
+// ---- main loop: fixed timestep + render interpolation ----
+// Runs `steps` fixed steps, moving the pointer target smoothly from where the
+// simulation last saw it to the latest pointer position.
+function advance(steps) {
+  const x0 = pointer.simX, y0 = pointer.simY;
+  for (let k = 0; k < steps; k++) {
+    pointer.stepX0 = pointer.simX; pointer.stepY0 = pointer.simY;
+    pointer.stepX1 = lerp(x0, pointer.x, (k + 1) / steps);
+    pointer.stepY1 = lerp(y0, pointer.y, (k + 1) / steps);
+    step(STEP_DT);
+    pointer.simX = pointer.stepX1; pointer.simY = pointer.stepY1;
+  }
+}
+
+let lastTime = performance.now(), accumulator = 0, fpsFrames = 0, fpsTime = 0, paused = false;
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = (now - lastTime) / 1000;
+  lastTime = now;
+  if (!(dt > 0)) dt = 0;
+  if (dt > 0.1) dt = 0.1;
+  if (paused) dt = 0;
+  accumulator += dt;
+  let steps = Math.floor(accumulator / STEP_DT);
+  if (steps > MAX_STEPS_PER_FRAME) { steps = MAX_STEPS_PER_FRAME; accumulator = 0; }
+  else accumulator -= steps * STEP_DT;
+  if (steps > 0) advance(steps);
+  updateShake(dt);
+  render(clamp(accumulator / STEP_DT, 0, 1));
+
+  fpsFrames++; fpsTime += dt;
+  if (fpsTime >= 0.5) { fpsEl.textContent = Math.round(fpsFrames / fpsTime) + ' FPS'; fpsFrames = 0; fpsTime = 0; }
+}
+
+// ---- boot ----
+buildButterMesh();
+resize();
+deriveParams();
+resetButter();
+if (window.innerWidth < 700) setPanelCollapsed(true);
+window.addEventListener('resize', resize);
+document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
+requestAnimationFrame(t => { lastTime = t; frame(t); });
+
+// small debugging / testing handle (deterministic stepping + scripted pointer)
+window.butterToy = {
+  params, world, butter, bodies, tune,
+  pause(p = true) { paused = p; },
+  run(steps = 1) { advance(steps); render(1); },
+  press(x, y, whole = false) {
+    pointer.down = true; pointer.id = -1; pointer.x = x; pointer.y = y;
+    pointer.hist.length = 0; pushHistory(x, y); beginInteraction(x, y, whole !== (grabModeUI === 'whole'));
+    return pointer.mode;
+  },
+  moveTo(x, y) { pointer.x = x; pointer.y = y; pushHistory(x, y); },
+  release(vx = 0, vy = 0) {
+    pointer.hist.length = 0;
+    const t = performance.now();
+    pointer.hist.push({ t: t - 50, x: pointer.x - vx * 0.05, y: pointer.y - vy * 0.05 }, { t, x: pointer.x, y: pointer.y });
+    endInteraction(); pointer.down = false; pointer.id = null;
+  },
+  spawn: spawnObject, drop: dropObject, reset: resetAll,
+  get shake() { return shake; },
+  arrays: () => ({ BX, BY, BVX, BVY, stick: butter.stick }),
+  state() {
+    butterBounds();
+    let A = 0;
+    for (let i = 0; i < butter.nb; i++) { const j = (i + 1) % butter.nb; A += BX[i] * BY[j] - BX[j] * BY[i]; }
+    return { n: butter.n, nb: butter.nb, nt: butter.nt, ne: butter.ne, cx: butter.cx, cy: butter.cy, angle: butter.angle,
+             squash: butter.squash, areaRatio: 0.5 * A / butter.area0, minX: bb.minX + 4, maxX: bb.maxX - 4,
+             minY: bb.minY + 4, maxY: bb.maxY - 4, floorY: world.floorY, w: world.w, h: world.h, scale: world.scale,
+             objects: bodies.filter(b => b.kind !== 'finger').map(b => ({ kind: b.kind, x: b.x, y: b.y, vx: b.vx, vy: b.vy })) };
+  },
+};
+})();
+</script>
+</body>
+</html>
