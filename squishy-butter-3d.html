@@ -180,6 +180,7 @@ const gravity = () => (params.gravityOn ? params.gravity : 0);
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const lerp = (a, b, t) => a + (b - a) * t;
+const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 // ---------- quaternion helpers (q = [x, y, z, w]) ----------
 function quatToMat3(q, m) {           // row-major 3×3
@@ -247,10 +248,16 @@ class Body {
     this.R = new Float64Array(9);
     quatToMat3(this.q, this.R);
     this.held = false; this.noGravity = false;
-    this.onButter = false; this.floorContact = false; this.restTime = 0;
+    this.onButter = false; this.floorContact = false;
     // contact patch with the butter (count and summed normal), and bounce bookkeeping
     this.cc = 0; this.cnx = 0; this.cny = 0; this.cnz = 0;
     this.wasOnButter = false; this.impact = 0; this.contactT = 0; this.lux = 0; this.luy = 1; this.luz = 0; this.lvx = 0; this.lvy = 0; this.lvz = 0;
+    this.ghost = false;                   // got into the butter: no butter contacts until it is eased out
+    this.insideSteps = 0;
+    this.anchored = false; this.ax = 0; this.ay = 0; this.az = 0;   // stiction spot in the butter's frame
+    this.asleep = false; this.sleepT = 0; this.bodyContact = false;   // sleeping (see wakeBody)
+    this.sleepX = 0; this.sleepY = 0; this.sleepZ = 0; this.sleepQ = [0, 0, 0, 1];
+    this.nCandP = 0;                      // nearby butter particles this step (the lists live on the parts)
   }
   // Refresh the rotation matrix and part centres after the pose changed. Box sample
   // points are re-transformed lazily (boxSamples) only when something needs them.
@@ -303,6 +310,7 @@ function boxPart(ox, oy, oz, hx, hy, hz) {
       s.push(ox + p[0], oy + p[1], oz + p[2]);
     }
   }
+  const nEdge = s.length;                            // corners + edges: the parts that can poke through gaps
   for (let ax = 0; ax < 3; ax++) {                    // 6 faces, interior grid
     const u = (ax + 1) % 3, v = (ax + 2) % 3;
     const nu = Math.max(1, Math.round(2 * h[u] / 14)), nv = Math.max(1, Math.round(2 * h[v] / 14));
@@ -313,7 +321,7 @@ function boxPart(ox, oy, oz, hx, hy, hz) {
     }
   }
   const ls = new Float64Array(s);
-  return { type: 1, ox, oy, oz, hx, hy, hz, ls, ws: new Float64Array(ls.length), wx: 0, wy: 0, wz: 0, dirty: true,
+  return { type: 1, ox, oy, oz, hx, hy, hz, ls, nEdge, ws: new Float64Array(ls.length), wx: 0, wy: 0, wz: 0, dirty: true,
            minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
 }
 
@@ -357,10 +365,11 @@ function invInertiaMul(b, x, y, z) {
 
 // ---------- generic XPBD contact solver ----------
 // A contact connects two "sides": the static world, a rigid body (with a lever
-// arm r), or a single butter particle. Every collision type shares the same
-// position solve, friction and restitution code.
-const K_STATIC = 0, K_BODY = 1, K_PART = 2;
-const newSide = () => ({ k: 0, b: null, i: 0, rx: 0, ry: 0, rz: 0 });
+// arm r), a single butter particle, or a point on a butter surface triangle
+// (three particles with barycentric weights). Every collision type shares the
+// same position solve, friction and restitution code.
+const K_STATIC = 0, K_BODY = 1, K_PART = 2, K_TRI = 3;
+const newSide = () => ({ k: 0, b: null, i: 0, j: 0, l: 0, u: 0, v: 0, w: 0, rx: 0, ry: 0, rz: 0 });
 const SA = newSide(), SB = newSide();
 
 // butter particle arrays (allocated in section 2, used by the solver)
@@ -369,25 +378,51 @@ let BX, BY, BZ, BPX, BPY, BPZ, BVX, BVY, BVZ, BW, BSX, BSY, BSZ;
 function setStatic(s) { s.k = K_STATIC; s.b = null; }
 function setBody(s, b, px, py, pz) { s.k = K_BODY; s.b = b; s.rx = px - b.x; s.ry = py - b.y; s.rz = pz - b.z; }
 function setParticle(s, i) { s.k = K_PART; s.i = i; }
+function setTri(s, a, b, c, u, v, w) { s.k = K_TRI; s.i = a; s.j = b; s.l = c; s.u = u; s.v = v; s.w = w; }
+
+// Impact sharing: during a fast hit, a fraction `share` of every impulse on the butter goes
+// to the butter as a whole (as if its gel interior passed the push on at once), so a heavy
+// fast object shoves the butter instead of punching a deep hole into it. The whole-body
+// part is accumulated and applied once per substep (applyShare).
+let share = 0, shGX = 0, shGY = 0, shGZ = 0, shSX = 0, shSY = 0, shSZ = 0;
+function applyShare() {
+  if (shGX === 0 && shGY === 0 && shGZ === 0 && shSX === 0 && shSY === 0 && shSZ === 0) return;
+  const n = butter.n;
+  for (let i = 0; i < n; i++) {
+    BX[i] += shGX + shSX; BY[i] += shGY + shSY; BZ[i] += shGZ + shSZ;
+    BPX[i] += shSX; BPY[i] += shSY; BPZ[i] += shSZ;
+  }
+  shGX = shGY = shGZ = shSX = shSY = shSZ = 0;
+}
 
 function sideInvMass(s, nx, ny, nz) {
   if (s.k === K_BODY) {
+    if (s.b.asleep) return 0;
     const cx = s.ry * nz - s.rz * ny, cy = s.rz * nx - s.rx * nz, cz = s.rx * ny - s.ry * nx;
     invInertiaMul(s.b, cx, cy, cz);
     return s.b.invM + cx * tX + cy * tY + cz * tZ;
   }
-  return s.k === K_PART ? BW[s.i] : 0;
+  if (s.k === K_TRI) return (1 - share) * (s.u * s.u * BW[s.i] + s.v * s.v * BW[s.j] + s.w * s.w * BW[s.l]) + share / params.mass;
+  return s.k === K_PART ? (1 - share) * BW[s.i] + share / params.mass : 0;
 }
 function sideMove(s, Px, Py, Pz) {       // positional impulse
   if (s.k === K_BODY) {
     const b = s.b;
+    if (b.asleep) return;
     b.x += Px * b.invM; b.y += Py * b.invM; b.z += Pz * b.invM;
     invInertiaMul(b, s.ry * Pz - s.rz * Py, s.rz * Px - s.rx * Pz, s.rx * Py - s.ry * Px);
     quatRotate(b.q, tX, tY, tZ);
     quatToMat3(b.q, b.R);
   } else if (s.k === K_PART) {
-    const i = s.i, w = BW[i];
+    const i = s.i, w = (1 - share) * BW[i];
     BX[i] += Px * w; BY[i] += Py * w; BZ[i] += Pz * w;
+    if (share > 0) { const g = share / params.mass; shGX += Px * g; shGY += Py * g; shGZ += Pz * g; }
+  } else if (s.k === K_TRI) {
+    const f = 1 - share, a = f * s.u * BW[s.i], b = f * s.v * BW[s.j], c = f * s.w * BW[s.l];
+    BX[s.i] += Px * a; BY[s.i] += Py * a; BZ[s.i] += Pz * a;
+    BX[s.j] += Px * b; BY[s.j] += Py * b; BZ[s.j] += Pz * b;
+    BX[s.l] += Px * c; BY[s.l] += Py * c; BZ[s.l] += Pz * c;
+    if (share > 0) { const g = share / params.mass; shGX += Px * g; shGY += Py * g; shGZ += Pz * g; }
   }
 }
 // Move a side without changing its velocity (current and previous positions together).
@@ -395,10 +430,15 @@ function sideMove(s, Px, Py, Pz) {       // positional impulse
 function sideShift(s, Px, Py, Pz) {
   if (s.k === K_BODY) {
     const b = s.b, m = b.invM;
+    if (b.asleep) return;
     b.x += Px * m; b.y += Py * m; b.z += Pz * m; b.px += Px * m; b.py += Py * m; b.pz += Pz * m;
-  } else if (s.k === K_PART) {
-    const i = s.i, w = BW[i];
-    BX[i] += Px * w; BY[i] += Py * w; BZ[i] += Pz * w; BPX[i] += Px * w; BPY[i] += Py * w; BPZ[i] += Pz * w;
+  } else if (s.k === K_PART || s.k === K_TRI) {
+    const f = 1 - share;
+    for (let k = 0; k < (s.k === K_PART ? 1 : 3); k++) {
+      const i = k === 0 ? s.i : k === 1 ? s.j : s.l, w = f * (s.k === K_PART ? 1 : k === 0 ? s.u : k === 1 ? s.v : s.w) * BW[i];
+      BX[i] += Px * w; BY[i] += Py * w; BZ[i] += Pz * w; BPX[i] += Px * w; BPY[i] += Py * w; BPZ[i] += Pz * w;
+    }
+    if (share > 0) { const g = share / params.mass; shSX += Px * g; shSY += Py * g; shSZ += Pz * g; }
   }
 }
 function sideDisp(s) {                   // displacement of the contact point during this substep
@@ -412,6 +452,11 @@ function sideDisp(s) {                   // displacement of the contact point du
   } else if (s.k === K_PART) {
     const i = s.i;
     tX = BX[i] - BPX[i]; tY = BY[i] - BPY[i]; tZ = BZ[i] - BPZ[i];
+  } else if (s.k === K_TRI) {
+    const a = s.i, b = s.j, c = s.l, u = s.u, v = s.v, w = s.w;
+    tX = u * (BX[a] - BPX[a]) + v * (BX[b] - BPX[b]) + w * (BX[c] - BPX[c]);
+    tY = u * (BY[a] - BPY[a]) + v * (BY[b] - BPY[b]) + w * (BY[c] - BPY[c]);
+    tZ = u * (BZ[a] - BPZ[a]) + v * (BZ[b] - BPZ[b]) + w * (BZ[c] - BPZ[c]);
   } else { tX = 0; tY = 0; tZ = 0; }
 }
 function sideVel(s) {
@@ -422,17 +467,26 @@ function sideVel(s) {
     tZ = b.vz + b.wx * s.ry - b.wy * s.rx;
   } else if (s.k === K_PART) {
     tX = BVX[s.i]; tY = BVY[s.i]; tZ = BVZ[s.i];
+  } else if (s.k === K_TRI) {
+    const a = s.i, b = s.j, c = s.l, u = s.u, v = s.v, w = s.w;
+    tX = u * BVX[a] + v * BVX[b] + w * BVX[c]; tY = u * BVY[a] + v * BVY[b] + w * BVY[c]; tZ = u * BVZ[a] + v * BVZ[b] + w * BVZ[c];
   } else { tX = 0; tY = 0; tZ = 0; }
 }
 function sideImpulse(s, Jx, Jy, Jz) {    // velocity impulse
   if (s.k === K_BODY) {
     const b = s.b;
+    if (b.asleep) return;
     b.vx += Jx * b.invM; b.vy += Jy * b.invM; b.vz += Jz * b.invM;
     invInertiaMul(b, s.ry * Jz - s.rz * Jy, s.rz * Jx - s.rx * Jz, s.rx * Jy - s.ry * Jx);
     b.wx += tX; b.wy += tY; b.wz += tZ;
   } else if (s.k === K_PART) {
     const w = BW[s.i];
     BVX[s.i] += Jx * w; BVY[s.i] += Jy * w; BVZ[s.i] += Jz * w;
+  } else if (s.k === K_TRI) {
+    const a = s.u * BW[s.i], b = s.v * BW[s.j], c = s.w * BW[s.l];
+    BVX[s.i] += Jx * a; BVY[s.i] += Jy * a; BVZ[s.i] += Jz * a;
+    BVX[s.j] += Jx * b; BVY[s.j] += Jy * b; BVZ[s.j] += Jz * b;
+    BVX[s.l] += Jx * c; BVY[s.l] += Jy * c; BVZ[s.l] += Jz * c;
   }
 }
 
@@ -440,7 +494,9 @@ function sideImpulse(s, Jx, Jy, Jz) {    // velocity impulse
 // velocities have been derived from the corrected positions.
 const bounceRecs = [];
 let bounceCount = 0;
-function copySide(d, s) { d.k = s.k; d.b = s.b; d.i = s.i; d.rx = s.rx; d.ry = s.ry; d.rz = s.rz; }
+function copySide(d, s) {
+  d.k = s.k; d.b = s.b; d.i = s.i; d.j = s.j; d.l = s.l; d.u = s.u; d.v = s.v; d.w = s.w; d.rx = s.rx; d.ry = s.ry; d.rz = s.rz;
+}
 function recordBounce(nx, ny, nz, vnPre, e) {
   let r = bounceRecs[bounceCount];
   if (!r) { r = { A: newSide(), B: newSide(), nx: 0, ny: 0, nz: 0, vnPre: 0, e: 0 }; bounceRecs.push(r); }
@@ -455,6 +511,10 @@ function recordBounce(nx, ny, nz, vnPre, e) {
 // the rest is removed as a pure shift, so overlaps never catapult anything.
 const DEPTH_VEL_LIMIT = 0.35;
 function resolveContact(nx, ny, nz, depth, muS, muK, e) {
+  if (depth > WAKE_DEPTH) {               // something pushes into a sleeping body: wake it up
+    if (SA.k === K_BODY && SA.b.asleep) wakeBody(SA.b);
+    if (SB.k === K_BODY && SB.b.asleep) wakeBody(SB.b);
+  }
   const wA = sideInvMass(SA, nx, ny, nz), wB = sideInvMass(SB, nx, ny, nz), wSum = wA + wB;
   if (wSum < 1e-12 || depth <= 0) return 0;
   sideVel(SB); const bx = tX, by = tY, bz = tZ;
@@ -489,6 +549,19 @@ function resolveContact(nx, ny, nz, depth, muS, muK, e) {
   if (e > 0 && vnPre < -BOUNCE_MIN_SPEED) recordBounce(nx, ny, nz, vnPre, e);
   return dl;
 }
+
+// Sleeping: a body that has been (nearly) still for a while, resting on the floor or on
+// other bodies, is frozen and treated as static until something pushes into it, it is
+// grabbed, or a neighbour wakes up. Resting piles cost nothing and never creep.
+const SLEEP_SPEED = 6, SLEEP_SPIN = 0.15, SLEEP_TIME = 0.5, SLEEP_DRIFT = 1.5, WAKE_DEPTH = 0.3;
+function wakeBody(b) {
+  if (!b.asleep) return;
+  b.asleep = false; b.sleepT = 0;
+  for (const o of bodies) {               // whatever it was holding up (or resting on) wakes too
+    if (o.asleep && Math.hypot(o.x - b.x, o.y - b.y, o.z - b.z) < o.radius + b.radius + 4) wakeBody(o);
+  }
+}
+function wakeAll() { for (const b of bodies) { b.asleep = false; b.sleepT = 0; } }
 
 // Velocity pass: give impacting contacts their restitution.
 function solveBounces() {
@@ -545,6 +618,7 @@ const butter = {
   stick: null, onFloor: null,
   cx: 0, cy: 0, cz: 0, q: [0, 0, 0, 1], R: new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
   vcx: 0, vcy: 0, vcz: 0, wx: 0, wy: 0, wz: 0, squash: 0,
+  releaseT: 0, releaseV: [0, 0, 0],   // just let go of a whole grab: recoil limit (see dampButter)
   flipped: 0, tangleTime: 0, smBoost: 0, rescue: false,
   massSet: -1, aEdge: 0, aBend: 0, aSpoke: 0, aCore: 0, smK: 0, creep: 0, recover: 0, dampK: 0, tau: 0,
   sub: null,                      // Loop-subdivision topology for drawing
@@ -671,6 +745,12 @@ function buildButterMesh() {
     butter.restN[3 * t] = uy * vz - uz * vy; butter.restN[3 * t + 1] = uz * vx - ux * vz; butter.restN[3 * t + 2] = ux * vy - uy * vx;
   }
   butter.vol0 = V / 6;
+  butter.triRest2 = new Float64Array(butter.nt);          // longest rest edge², per triangle
+  for (let t = 0; t < butter.nt; t++) {
+    const a = T[3 * t], b = T[3 * t + 1], c = T[3 * t + 2];
+    const e = (i, j) => (qx[i] - qx[j]) ** 2 + (qy[i] - qy[j]) ** 2 + (qz[i] - qz[j]) ** 2;
+    butter.triRest2[t] = Math.max(e(a, b), e(b, c), e(c, a));
+  }
   const ext = [0, 0, 0];
   for (let i = 0; i < ns; i++) { ext[0] = Math.max(ext[0], Math.abs(qx[i])); ext[1] = Math.max(ext[1], Math.abs(qy[i])); ext[2] = Math.max(ext[2], Math.abs(qz[i])); }
   butter.restExt = ext;
@@ -685,6 +765,13 @@ function buildButterMesh() {
   }
   ringStart[n] = ringIdx.length;
   butter.ringStart = ringStart; butter.ringIdx = new Int32Array(ringIdx);
+  // triangles around every particle (collision candidates)
+  const vtCount = new Int32Array(n + 1);
+  for (let t = 0; t < T.length; t++) vtCount[T[t] + 1]++;
+  for (let i = 0; i < n; i++) vtCount[i + 1] += vtCount[i];
+  const vtIdx = new Int32Array(T.length), fill = vtCount.slice(0, n);
+  for (let t = 0; t < T.length; t++) vtIdx[fill[T[t]]++] = (t / 3) | 0;
+  butter.vtStart = vtCount; butter.vtIdx = vtIdx;
   butter.nrmX = new Float64Array(n); butter.nrmY = new Float64Array(n); butter.nrmZ = new Float64Array(n);
   butter.curveH = new Float64Array(n);
   const subT = [];
@@ -694,7 +781,7 @@ function buildButterMesh() {
     subT.push(a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca);
   }
   butter.sub = {
-    nv: n + nEdge, ringStart, ringIdx: new Int32Array(ringIdx), beta,
+    nv: n + nEdge, ringStart, ringIdx: butter.ringIdx, beta,
     edgeA: new Int32Array(nEdge), edgeB: new Int32Array(nEdge), edgeC: new Int32Array(nEdge), edgeD: new Int32Array(nEdge),
     tris: new Uint16Array(subT),
   };
@@ -733,7 +820,7 @@ function placeButter(cx, cy, cz) {
   updateEdgeRest(butter.plX, butter.plY, butter.plZ);
   updateCurveRest(butter.plX, butter.plY, butter.plZ);
   butter.cx = cx; butter.cy = cy; butter.cz = cz; butter.q = [0, 0, 0, 1]; quatToMat3(butter.q, butter.R);
-  butter.vcx = butter.vcy = butter.vcz = 0; butter.squash = 0;
+  butter.vcx = butter.vcy = butter.vcz = 0; butter.squash = 0; butter.releaseT = 0;
   butter.flipped = 0; butter.tangleTime = 0; butter.smBoost = 0; butter.rescue = false;
 }
 
@@ -756,6 +843,7 @@ const tune = {
   sink: 12,          // objects resting on the butter follow its local surface at this rate (1/s)
   drawOffset: 10,    // the drawn surface sits this far outside the particle centres (= PR)
   curve: 0.12,       // surface curvature memory (per substep): smooth surface, no wrinkles
+  share: 0.8,        // fast hits: this much of the push goes to the butter as a whole (shove, not puncture)
 };
 
 // Slider values → solver parameters.
@@ -968,13 +1056,23 @@ function dampButter(dt) {
   for (let i = 0; i < n; i++) contacts += butter.onFloor[i];
   const rk = contacts >= 12 ? Math.exp(-tune.roll * Math.min(1, (contacts - 11) / 25) * dt) : 1;
   const k = Math.exp(-butter.dampK * dt), air = Math.exp(-(params.gravityOn ? 0.03 : 0.8) * dt);
+  // just released from a squeeze or press: the stored squash springs back into a jiggle, not
+  // a launch (the body may not move faster than it was thrown, plus a little)
+  let nx = vx, ny = vy, nz = vz;
+  if (butter.releaseT > 0) {
+    butter.releaseT -= dt;
+    const RV = butter.releaseV, h = Math.hypot(vx, vz), hMax = Math.hypot(RV[0], RV[2]) + RELEASE_GAIN, yMax = Math.max(RV[1], 0) + RELEASE_GAIN;
+    if (h > hMax) { nx = vx * hMax / h; nz = vz * hMax / h; }
+    if (vy > yMax) ny = yMax;
+  }
   for (let i = 0; i < n; i++) {
     const rx = BX[i] - cx, ry = BY[i] - cy, rz = BZ[i] - cz;
     const ax = oy * rz - oz * ry, ay = oz * rx - ox * rz, az = ox * ry - oy * rx;   // ω × r
-    BVX[i] = (vx + ax * rk + (BVX[i] - vx - ax) * k) * air;
-    BVY[i] = (vy + ay * rk + (BVY[i] - vy - ay) * k) * air;
-    BVZ[i] = (vz + az * rk + (BVZ[i] - vz - az) * k) * air;
+    BVX[i] = (nx + ax * rk + (BVX[i] - vx - ax) * k) * air;
+    BVY[i] = (ny + ay * rk + (BVY[i] - vy - ay) * k) * air;
+    BVZ[i] = (nz + az * rk + (BVZ[i] - vz - az) * k) * air;
   }
+  vx = nx; vy = ny; vz = nz;
   butter.vcx = vx; butter.vcy = vy; butter.vcz = vz;
   butter.wx = ox * rk; butter.wy = oy * rk; butter.wz = oz * rk;
 }
@@ -1102,6 +1200,10 @@ function collideButterWorld(h) {
   }
 }
 
+// Corners within this distance of a surface share in its support (keeps resting contacts
+// from flickering between corner sets).
+const CONTACT_SKIN = 0.5;
+
 // Arena planes as (normal, offset): inside means n·p + d ≥ 0.
 const PLANES = [[0, 1, 0, 0], [0, -1, 0, ARENA.top], [1, 0, 0, ARENA.x], [-1, 0, 0, ARENA.x], [0, 0, 1, ARENA.z], [0, 0, -1, ARENA.z]];
 
@@ -1116,21 +1218,24 @@ function sphereVsWorld(b, p) {
     b.updateWorld();
   }
 }
-// A box part against the arena planes: the corners within a whisker of the deepest one
-// are averaged into a single contact, so a box landing flat lands flat (no spurious spin).
+// A box part against the arena planes: the corners below the plane form one contact at
+// their depth-weighted centre. A box landing flat lands flat (no spurious spin), and as
+// soon as one side sinks deeper the support shifts toward it and levels the box, like
+// the pressure under a real face does (no rocking, no tipping onto an edge when sliding).
 function boxVsWorld(b, p) {
   for (let k = 0; k < 6; k++) {
     boxSamples(b, p);
     const P = PLANES[k], ws = p.ws;
-    let maxD = 0;
-    for (let c = 0; c < 24; c += 3) maxD = Math.max(maxD, -(P[0] * ws[c] + P[1] * ws[c + 1] + P[2] * ws[c + 2] + P[3]));
-    if (maxD <= 0) continue;
-    let ax = 0, ay = 0, az = 0, m = 0;
+    let maxD = 0, ax = 0, ay = 0, az = 0, sw = 0;
     for (let c = 0; c < 24; c += 3) {
-      const d = -(P[0] * ws[c] + P[1] * ws[c + 1] + P[2] * ws[c + 2] + P[3]);
-      if (d > maxD - 1.5) { ax += ws[c]; ay += ws[c + 1]; az += ws[c + 2]; m++; }
+      const d = -(P[0] * ws[c] + P[1] * ws[c + 1] + P[2] * ws[c + 2] + P[3]) + CONTACT_SKIN;
+      if (d <= 0) continue;
+      ax += ws[c] * d; ay += ws[c + 1] * d; az += ws[c + 2] * d; sw += d;
+      if (d > maxD) maxD = d;
     }
-    setStatic(SA); setBody(SB, b, ax / m, ay / m, az / m);
+    maxD -= CONTACT_SKIN;
+    if (maxD <= 0) continue;
+    setStatic(SA); setBody(SB, b, ax / sw, ay / sw, az / sw);
     resolveContact(P[0], P[1], P[2], maxD, b.mu, b.mu * 0.8, b.e);
     if (k === 0) b.floorContact = true;
     b.updateWorld();
@@ -1138,6 +1243,7 @@ function boxVsWorld(b, p) {
 }
 
 function collideBodyWorld(b) {
+  if (b.asleep) return;
   b.updateWorld();
   for (const p of b.parts) {
     if (p.type === 0) sphereVsWorld(b, p);
@@ -1156,6 +1262,7 @@ function toBoxLocal(b, p, x, y, z) {
 
 // ---- rigid ↔ rigid ----
 function collideBodies(A, B) {
+  if (A.asleep && B.asleep) return;
   const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, rr = A.radius + B.radius;
   if (dx * dx + dy * dy + dz * dz > rr * rr) return;
   const e = (A.e + B.e) * 0.5, mu = Math.sqrt(A.mu * B.mu);
@@ -1176,6 +1283,7 @@ function sphereSphere(A, pa, B, pb, mu, e) {
   const s = pa.r - depth / 2, px = pa.wx + nx * s, py = pa.wy + ny * s, pz = pa.wz + nz * s;
   setBody(SA, A, px, py, pz); setBody(SB, B, px, py, pz);
   resolveContact(nx, ny, nz, depth, mu, mu * 0.8, e);
+  A.bodyContact = B.bodyContact = true;
   A.updateWorld(); B.updateWorld();
 }
 
@@ -1202,83 +1310,203 @@ function sphereBox(S, ps, Bx, pb, mu, e) {
   const px = pb.wx + R[0] * qx + R[1] * qy + R[2] * qz, py = pb.wy + R[3] * qx + R[4] * qy + R[5] * qz, pz = pb.wz + R[6] * qx + R[7] * qy + R[8] * qz;
   setBody(SA, Bx, px, py, pz); setBody(SB, S, px, py, pz);
   resolveContact(nx, ny, nz, depth, mu, mu * 0.8, e);
+  S.bodyContact = Bx.bodyContact = true;
   S.updateWorld(); Bx.updateWorld();
 }
 
 // Sample points of box pa (body A) inside box pb (body B) are pushed out through B's
-// face of deepest penetration; samples pushing through that same face (and nearly as
-// deep) are averaged into one contact, so flat contacts don't add spin.
-const faceDepth = new Float64Array(6), faceSum = new Float64Array(24);
+// face of deepest penetration, as one contact at their depth-weighted centre (points
+// just outside within CONTACT_SKIN count a little): flat contacts add no spin, and a
+// tilted box is pushed back level by its deeper side.
+const faceSum = new Float64Array(24);
 function boxBox(A, pa, B, pb, mu, e) {
   boxSamples(A, pa); boxSamples(B, pb);
-  if (pa.maxX < pb.minX || pa.minX > pb.maxX || pa.maxY < pb.minY || pa.minY > pb.maxY || pa.maxZ < pb.minZ || pa.minZ > pb.maxZ) return;
-  const ws = pa.ws;
+  const S = CONTACT_SKIN;
+  if (pa.maxX < pb.minX - S || pa.minX > pb.maxX + S || pa.maxY < pb.minY - S || pa.minY > pb.maxY + S || pa.maxZ < pb.minZ - S || pa.minZ > pb.maxZ + S) return;
+  const ws = pa.ws, R = B.R;
   let best = -1, bestD = 0;
-  faceDepth.fill(0); faceSum.fill(0);
+  faceSum.fill(0);
   for (let pass = 0; pass < 2; pass++) {
     for (let s = 0; s < ws.length; s += 3) {
       const x = ws[s], y = ws[s + 1], z = ws[s + 2];
-      if (x < pb.minX || x > pb.maxX || y < pb.minY || y > pb.maxY || z < pb.minZ || z > pb.maxZ) continue;
+      if (x < pb.minX - S || x > pb.maxX + S || y < pb.minY - S || y > pb.maxY + S || z < pb.minZ - S || z > pb.maxZ + S) continue;
       toBoxLocal(B, pb, x, y, z);
       const fx = pb.hx - Math.abs(lX), fy = pb.hy - Math.abs(lY), fz = pb.hz - Math.abs(lZ);
-      if (fx <= 0 || fy <= 0 || fz <= 0) continue;
+      if (fx <= -S || fy <= -S || fz <= -S) continue;
       let f, d;
       if (fx <= fy && fx <= fz) { f = lX > 0 ? 0 : 1; d = fx; } else if (fy <= fz) { f = lY > 0 ? 2 : 3; d = fy; } else { f = lZ > 0 ? 4 : 5; d = fz; }
       if (pass === 0) { if (d > bestD) { bestD = d; best = f; } }
-      else if (f === best && d > bestD - 1.5) { faceSum[4 * f] += x; faceSum[4 * f + 1] += y; faceSum[4 * f + 2] += z; faceSum[4 * f + 3]++; }
+      else if (f === best) { const w = d + S; faceSum[0] += x * w; faceSum[1] += y * w; faceSum[2] += z * w; faceSum[3] += w; }
     }
     if (best < 0) return;
   }
-  const m = faceSum[4 * best + 3], x = faceSum[4 * best] / m, y = faceSum[4 * best + 1] / m, z = faceSum[4 * best + 2] / m;
-  const ax = best >> 1, sg = best & 1 ? -1 : 1, R = B.R;
-  const nx = R[ax] * sg, ny = R[3 + ax] * sg, nz = R[6 + ax] * sg;     // B's face normal (a column of R)
+  const m = faceSum[3], x = faceSum[0] / m, y = faceSum[1] / m, z = faceSum[2] / m;
+  const ax = best >> 1, sg = best & 1 ? -1 : 1;
+  const nx = R[ax] * sg, ny = R[3 + ax] * sg, nz = R[6 + ax] * sg;     // B's face normal (a column of R), B → A
   setBody(SA, B, x, y, z); setBody(SB, A, x, y, z);
   resolveContact(nx, ny, nz, bestD, mu, mu * 0.8, e);
+  A.bodyContact = B.bodyContact = true;
   A.updateWorld(); B.updateWorld();
 }
 
-// ---- rigid ↔ butter (particles are spheres of radius PR) ----
+// ---- rigid ↔ butter ----
+// Two layers: every surface particle is a small sphere (radius PR), and under them the
+// surface triangles form a slightly thinner second skin (GUARD), so nothing can slip
+// through the gaps that open between particles when the shell is stretched by a dent.
 const BUTTER_MU_S = 0.75, BUTTER_MU_K = 0.55;
+const GUARD = 0.75 * PR;
 
-// Body ↔ butter. Each surface particle is a small sphere (radius PR). The push direction
-// leans on the particle's outward surface normal, so particles get pressed *into* the
-// butter instead of sliding around the object (which would let it slip inside), and a
-// point that has dipped below the surface is pushed straight back out along the normal.
+// Per step, each part of each body gets a short list of nearby surface particles and the
+// triangles around them (a body moves at most a few dozen units in one step).
+let triStamp = null, stampTick = 0;
+function butterCandidates(b, vpMax, extra) {
+  b.nCandP = 0;
+  for (const p of b.parts) { p.nCandP = 0; p.nCandT = 0; }
+  if (b.ghost) return;
+  b.updateWorld();
+  const sp = Math.hypot(b.vx, b.vy, b.vz), fast = sp > 250 || b.held || b.kind === 'finger';
+  const move = (sp + vpMax) * STEP_DT * 1.3 + extra, spin = Math.hypot(b.wx, b.wy, b.wz) * STEP_DT * 1.3;
+  if (!triStamp || triStamp.length < butter.nt) triStamp = new Int32Array(butter.nt);
+  for (const p of b.parts) {
+    const pr = p.type === 0 ? p.r : Math.hypot(p.hx, p.hy, p.hz);
+    const reach = pr + PR + 12 + move + spin * Math.hypot(p.wx - b.x, p.wy - b.y, p.wz - b.z);
+    const x = p.wx, y = p.wy, z = p.wz;
+    if (x + reach < bb.minX || x - reach > bb.maxX || y + reach < bb.minY || y - reach > bb.maxY ||
+        z + reach < bb.minZ || z - reach > bb.maxZ) continue;
+    if (!p.candP || p.candP.length < butter.ns) { p.candP = new Int32Array(butter.ns); p.candT = new Int32Array(butter.nt); }
+    const tick = ++stampTick, r2 = reach * reach, vs = butter.vtStart, vi = butter.vtIdx, cp = p.candP, ct = p.candT;
+    const TR = butter.tris, TR2 = butter.triRest2, allTris = fast;
+    let np = 0, nt = 0;
+    for (let i = 0; i < butter.ns; i++) {
+      const dx = BX[i] - x; if (dx > reach || dx < -reach) continue;
+      const dy = BY[i] - y; if (dy > reach || dy < -reach) continue;
+      const dz = BZ[i] - z; if (dz > reach || dz < -reach) continue;
+      if (dx * dx + dy * dy + dz * dz > r2) continue;
+      cp[np++] = i;
+      for (let k = vs[i]; k < vs[i + 1]; k++) {
+        const t = vi[k];
+        if (triStamp[t] === tick) continue;
+        triStamp[t] = tick;
+        // at rest spacing the particle spheres leave no gap a body could slip through:
+        // only stretched triangles (or any, for a fast body) need the second skin
+        if (!allTris) {
+          const a = TR[3 * t], c1 = TR[3 * t + 1], c2 = TR[3 * t + 2];
+          const e = Math.max((BX[a] - BX[c1]) ** 2 + (BY[a] - BY[c1]) ** 2 + (BZ[a] - BZ[c1]) ** 2,
+            (BX[c1] - BX[c2]) ** 2 + (BY[c1] - BY[c2]) ** 2 + (BZ[c1] - BZ[c2]) ** 2, (BX[c2] - BX[a]) ** 2 + (BY[c2] - BY[a]) ** 2 + (BZ[c2] - BZ[a]) ** 2);
+          if (e < 1.21 * TR2[t]) continue;
+        }
+        ct[nt++] = t;
+      }
+    }
+    p.nCandP = np; p.nCandT = nt; b.nCandP += np;
+  }
+}
+
+// Particle contact. The push direction leans on the particle's outward surface normal,
+// so particles get pressed *into* the butter instead of sliding around the object; for
+// a point clearly behind the particle (inside the butter) it turns plain radial, so a
+// particle is never dragged through the object (no pulling bodies out the far side).
 function shellContact(b, i, qx, qy, qz, gap, muS, muK, e) {
   // (qx, qy, qz): the body's point closest to particle i; gap: allowed distance (radius + PR)
-  const NX = butter.nrmX, NY = butter.nrmY, NZ = butter.nrmZ;
-  const mx = NX[i], my = NY[i], mz = NZ[i];
+  const mx = butter.nrmX[i], my = butter.nrmY[i], mz = butter.nrmZ[i];
   const ox = qx - BX[i], oy = qy - BY[i], oz = qz - BZ[i];
   const d2 = ox * ox + oy * oy + oz * oz;
   if (d2 >= gap * gap) return false;
-  const along = ox * mx + oy * my + oz * mz;
-  let nx, ny, nz, depth;
-  if (along < 0) {                         // behind the particle's tangent plane → straight back out
-    nx = -mx; ny = -my; nz = -mz; depth = gap - along;
-  } else {
-    const d = Math.sqrt(d2) || 1e-6;
-    nx = -ox / d - mx; ny = -oy / d - my; nz = -oz / d - mz;
-    const l = Math.sqrt(nx * nx + ny * ny + nz * nz);
-    if (l < 1e-6) { nx = -mx; ny = -my; nz = -mz; } else { nx /= l; ny /= l; nz /= l; }
-    depth = gap - d;
-  }
+  const d = Math.sqrt(d2) || 1e-6, along = (ox * mx + oy * my + oz * mz) / d;
+  const lean = along >= 0 ? 1 : Math.max(0, 1 + 2 * along);
+  let nx = -ox / d - mx * lean, ny = -oy / d - my * lean, nz = -oz / d - mz * lean;
+  if (lowBody && ny > 0) ny = 0;            // (n points body → butter: never push a low body down under it)
+  const l = Math.sqrt(nx * nx + ny * ny + nz * nz);
+  if (l < 1e-6) { nx = -mx; ny = -my; nz = -mz; } else { nx /= l; ny /= l; nz /= l; }
   setBody(SA, b, qx, qy, qz); setParticle(SB, i);
-  resolveContact(nx, ny, nz, depth, muS, muK, e);
+  resolveContact(nx, ny, nz, gap - d, muS, muK, e);
   // remember the contact patch (local butter velocity and normal) for sinking / bounce shaping
   b.cc++; b.cnx += nx; b.cny += ny; b.cnz += nz;
   return true;
 }
 
+// Closest point on triangle (a, b, c) to p → barycentric (gU, gV, gW); gIn when it lies
+// inside the face (not on an edge or a corner). Ericson, Real-Time Collision Detection.
+let gU = 0, gV = 0, gW = 0, gIn = false;
+function closestOnTri(px, py, pz, a, b, c) {
+  const ax = BX[a], ay = BY[a], az = BZ[a];
+  const abx = BX[b] - ax, aby = BY[b] - ay, abz = BZ[b] - az, acx = BX[c] - ax, acy = BY[c] - ay, acz = BZ[c] - az;
+  const apx = px - ax, apy = py - ay, apz = pz - az;
+  const d1 = abx * apx + aby * apy + abz * apz, d2 = acx * apx + acy * apy + acz * apz;
+  gIn = false;
+  if (d1 <= 0 && d2 <= 0) { gU = 1; gV = 0; gW = 0; return; }
+  const bpx = px - BX[b], bpy = py - BY[b], bpz = pz - BZ[b];
+  const d3 = abx * bpx + aby * bpy + abz * bpz, d4 = acx * bpx + acy * bpy + acz * bpz;
+  if (d3 >= 0 && d4 <= d3) { gU = 0; gV = 1; gW = 0; return; }
+  const vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) { const v = d1 / (d1 - d3); gU = 1 - v; gV = v; gW = 0; return; }
+  const cpx = px - BX[c], cpy = py - BY[c], cpz = pz - BZ[c];
+  const d5 = abx * cpx + aby * cpy + abz * cpz, d6 = acx * cpx + acy * cpy + acz * cpz;
+  if (d6 >= 0 && d5 <= d6) { gU = 0; gV = 0; gW = 1; return; }
+  const vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) { const w = d2 / (d2 - d6); gU = 1 - w; gV = 0; gW = w; return; }
+  const va = d3 * d6 - d5 * d4;
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) { const w = (d4 - d3) / ((d4 - d3) + (d5 - d6)); gU = 0; gV = 1 - w; gW = w; return; }
+  const den = 1 / (va + vb + vc), v = vb * den, w = vc * den;
+  gU = 1 - v - w; gV = v; gW = w; gIn = true;
+}
+
+// A body point (sphere centre with radius r, or a box corner/edge point with r = 0)
+// against surface triangle t. In front of the face it is held GUARD (+ r) away; a point
+// that has just crossed the face is pushed back out along the face normal.
+function triContact(b, t, px, py, pz, r, muS, muK, e) {
+  const T = butter.tris, ia = T[3 * t], ib = T[3 * t + 1], ic = T[3 * t + 2];
+  const ax = BX[ia], ay = BY[ia], az = BZ[ia];
+  const ux = BX[ib] - ax, uy = BY[ib] - ay, uz = BZ[ib] - az, vx = BX[ic] - ax, vy = BY[ic] - ay, vz = BZ[ic] - az;
+  let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+  const nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
+  if (nl < 1e-9) return false;
+  nx /= nl; ny /= nl; nz /= nl;
+  const RN = butter.restN, R = butter.R, rx = RN[3 * t], ry = RN[3 * t + 1], rz = RN[3 * t + 2];
+  if (nx * (R[0] * rx + R[1] * ry + R[2] * rz) + ny * (R[3] * rx + R[4] * ry + R[5] * rz) + nz * (R[6] * rx + R[7] * ry + R[8] * rz) < 0) return false;   // folded: its normal can't be trusted
+  const G = r + GUARD, sd = (px - ax) * nx + (py - ay) * ny + (pz - az) * nz;
+  if (sd >= G || sd < -(Math.max(0.5 * r, 6) + GUARD)) return false;
+  closestOnTri(px, py, pz, ia, ib, ic);
+  let mx = nx, my = ny, mz = nz, depth = G - sd;
+  if (!gIn) {                                // near an edge or corner: only from the front
+    if (sd <= 0) return false;
+    const dx = px - (gU * ax + gV * BX[ib] + gW * BX[ic]), dy = py - (gU * ay + gV * BY[ib] + gW * BY[ic]), dz = pz - (gU * az + gV * BZ[ib] + gW * BZ[ic]);
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 >= G * G) return false;
+    const d = Math.sqrt(d2) || 1e-6;
+    mx = dx / d; my = dy / d; mz = dz / d; depth = G - d;
+  }
+  if (lowBody && my < 0) {                   // (m points butter → body)
+    const l = Math.hypot(mx, mz);
+    if (l < 0.2) return false;
+    mx /= l; my = 0; mz /= l;
+  }
+  setTri(SA, ia, ib, ic, gU, gV, gW); setBody(SB, b, px - mx * r, py - my * r, pz - mz * r);
+  resolveContact(mx, my, mz, depth, muS, muK, e);
+  b.cc++; b.cnx -= mx; b.cny -= my; b.cnz -= mz;
+  return true;
+}
+
+// A body down at floor level is never pushed further down by the butter: it can't wedge
+// itself under the butter's rounded bottom edge and lift it (the floor holds that skin).
+let lowBody = false;
+const LOW_BODY_Y = 30;
 function collideBodyButter(b) {
-  const r = b.radius + PR;
-  if (b.x + r < bb.minX || b.x - r > bb.maxX || b.y + r < bb.minY || b.y - r > bb.maxY || b.z + r < bb.minZ || b.z - r > bb.maxZ) return;
+  if (b.ghost || b.nCandP === 0) return;
   b.updateWorld();
   const fingerTip = b.kind === 'finger';
+  const rel = Math.hypot(b.vx - butter.vcx, b.vy - butter.vcy, b.vz - butter.vcz);
+  share = fingerTip ? 0 : tune.share * smoothstep(200, 1000, rel);
   const muS = fingerTip ? 0.6 : BUTTER_MU_S, muK = fingerTip ? 0.45 : BUTTER_MU_K, e = b.e * 0.45;
+  const T = butter.tris;
   for (const p of b.parts) {
+    const cp = p.candP, np = p.nCandP, ct = p.candT, nt = p.nCandT;
+    if (np === 0) continue;
     if (p.type === 0) {
       const R = p.r + PR;
-      for (let i = 0; i < butter.ns; i++) {
+      lowBody = !fingerTip && p.wy - p.r < LOW_BODY_Y;
+      for (let q = 0; q < np; q++) {
+        const i = cp[q];
         const dx = BX[i] - p.wx; if (dx > R || dx < -R) continue;
         const dy = BY[i] - p.wy; if (dy > R || dy < -R) continue;
         const dz = BZ[i] - p.wz; if (dz > R || dz < -R) continue;
@@ -1287,29 +1515,56 @@ function collideBodyButter(b) {
         const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6, k = Math.min(p.r, d) / d;
         if (shellContact(b, i, p.wx + dx * k, p.wy + dy * k, p.wz + dz * k, PR + (p.r - Math.min(p.r, d)), muS, muK, e)) b.updateWorld();
       }
+      const G = p.r + GUARD;
+      for (let q = 0; q < nt; q++) {
+        const t = ct[q], a = T[3 * t], c1 = T[3 * t + 1], c2 = T[3 * t + 2];
+        if (Math.min(BX[a], BX[c1], BX[c2]) > p.wx + G || Math.max(BX[a], BX[c1], BX[c2]) < p.wx - G ||
+            Math.min(BY[a], BY[c1], BY[c2]) > p.wy + G || Math.max(BY[a], BY[c1], BY[c2]) < p.wy - G ||
+            Math.min(BZ[a], BZ[c1], BZ[c2]) > p.wz + G || Math.max(BZ[a], BZ[c1], BZ[c2]) < p.wz - G) continue;
+        if (triContact(b, t, p.wx, p.wy, p.wz, p.r, muS, muK, e)) b.updateWorld();
+      }
     } else {
       boxSamples(b, p);
-      const ext = Math.hypot(p.hx, p.hy, p.hz) + PR;
-      for (let i = 0; i < butter.ns; i++) {
-        const x = BX[i], y = BY[i], z = BZ[i];
-        if (x < p.minX - PR || x > p.maxX + PR || y < p.minY - PR || y > p.maxY + PR || z < p.minZ - PR || z > p.maxZ + PR) continue;
+      lowBody = p.minY < LOW_BODY_Y;
+      const ext = Math.hypot(p.hx, p.hy, p.hz) + PR, M = PR + 4;    // (the AABB may be a little stale below)
+      for (let q = 0; q < np; q++) {
+        const i = cp[q], x = BX[i], y = BY[i], z = BZ[i];
+        if (x < p.minX - M || x > p.maxX + M || y < p.minY - M || y > p.maxY + M || z < p.minZ - M || z > p.maxZ + M) continue;
         if (Math.abs(x - p.wx) > ext || Math.abs(y - p.wy) > ext || Math.abs(z - p.wz) > ext) continue;
         toBoxLocal(b, p, x, y, z);
         const hx = p.hx, hy = p.hy, hz = p.hz;
         let cx = clamp(lX, -hx, hx), cy = clamp(lY, -hy, hy), cz = clamp(lZ, -hz, hz), gap = PR;
         if (cx === lX && cy === lY && cz === lZ) {        // particle inside the box: closest face point
           const fx = hx - Math.abs(lX), fy = hy - Math.abs(lY), fz = hz - Math.abs(lZ);
-          if (fx <= fy && fx <= fz) { cx = (Math.sign(lX) || 1) * hx; gap = PR + fx; }
-          else if (fy <= fz) { cy = (Math.sign(lY) || 1) * hy; gap = PR + fy; }
-          else { cz = (Math.sign(lZ) || 1) * hz; gap = PR + fz; }
-          cx = lX; cy = lY; cz = lZ;                       // the body point is where the particle is
+          gap = PR + Math.min(fx, fy, fz);
         }
         const R = b.R;
         const qx = p.wx + R[0] * cx + R[1] * cy + R[2] * cz, qy = p.wy + R[3] * cx + R[4] * cy + R[5] * cz, qz = p.wz + R[6] * cx + R[7] * cy + R[8] * cz;
-        if (shellContact(b, i, qx, qy, qz, gap, muS, muK, e)) { b.updateWorld(); boxSamples(b, p); }
+        if (shellContact(b, i, qx, qy, qz, gap, muS, muK, e)) b.updateWorld();
+      }
+      // corners and edges against the triangle skin: per triangle, its deepest point
+      boxSamples(b, p);
+      for (let q = 0; q < nt; q++) {
+        const t = ct[q], a = T[3 * t], c1 = T[3 * t + 1], c2 = T[3 * t + 2];
+        const x0 = Math.min(BX[a], BX[c1], BX[c2]) - GUARD, x1 = Math.max(BX[a], BX[c1], BX[c2]) + GUARD;
+        const y0 = Math.min(BY[a], BY[c1], BY[c2]) - GUARD, y1 = Math.max(BY[a], BY[c1], BY[c2]) + GUARD;
+        const z0 = Math.min(BZ[a], BZ[c1], BZ[c2]) - GUARD, z1 = Math.max(BZ[a], BZ[c1], BZ[c2]) + GUARD;
+        if (x0 > p.maxX || x1 < p.minX || y0 > p.maxY || y1 < p.minY || z0 > p.maxZ || z1 < p.minZ) continue;
+        const ws = p.ws;
+        let ux = BX[c1] - BX[a], uy = BY[c1] - BY[a], uz = BZ[c1] - BZ[a], vx = BX[c2] - BX[a], vy = BY[c2] - BY[a], vz = BZ[c2] - BZ[a];
+        const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        let best = -1, bestSd = Infinity;
+        for (let k = 0; k < p.nEdge; k += k < 24 ? 3 : 6) {          // all corners, every other edge point
+          const x = ws[k], y = ws[k + 1], z = ws[k + 2];
+          if (x < x0 || x > x1 || y < y0 || y > y1 || z < z0 || z > z1) continue;
+          const sd = (x - BX[a]) * nx + (y - BY[a]) * ny + (z - BZ[a]) * nz;
+          if (sd < bestSd) { bestSd = sd; best = k; }
+        }
+        if (best >= 0 && triContact(b, t, ws[best], ws[best + 1], ws[best + 2], 0, muS, muK, e)) { b.updateWorld(); boxSamples(b, p); }
       }
     }
   }
+  share = 0; lowBody = false;
   if (b.cc > 0) b.onButter = true;
 }
 
@@ -1318,15 +1573,17 @@ function solveCollisions() {
   for (let a = 0; a < bodies.length; a++)
     for (let c = a + 1; c < bodies.length; c++) collideBodies(bodies[a], bodies[c]);
   for (const b of bodies) collideBodyButter(b);
+  applyShare();
   for (const b of bodies) collideBodyWorld(b);
 }
 
-// Ray-parity test straight up from (x, y, z) through the butter surface. Returns the
-// height of the highest surface crossing above the point if it is inside, else NaN.
-function butterCeilingAbove(x, y, z) {
-  if (x < bb.minX || x > bb.maxX || y < bb.minY || y > bb.maxY || z < bb.minZ || z > bb.maxZ) return NaN;
+// Vertical ray from (x, y, z) upward through the butter surface: the number of crossings
+// above the point (colHits) and the lowest / highest of them (colLow / colTop).
+let colHits = 0, colLow = Infinity, colTop = -Infinity;
+function scanColumn(x, y, z) {
+  colHits = 0; colLow = Infinity; colTop = -Infinity;
+  if (x < bb.minX || x > bb.maxX || y > bb.maxY || z < bb.minZ || z > bb.maxZ) return;
   const T = butter.tris;
-  let hits = 0, top = -Infinity;
   for (let t = 0; t < butter.nt; t++) {
     const a = T[3 * t], b = T[3 * t + 1], c = T[3 * t + 2];
     const ax = BX[a] - x, az = BZ[a] - z, bx = BX[b] - x, bz = BZ[b] - z, cx = BX[c] - x, cz = BZ[c] - z;
@@ -1336,32 +1593,101 @@ function butterCeilingAbove(x, y, z) {
     const S = s1 + s2 + s3;
     if (Math.abs(S) < 1e-9) continue;
     const yy = (s2 * BY[a] + s3 * BY[b] + s1 * BY[c]) / S;
-    if (yy > y) { hits++; if (yy > top) top = yy; }
+    if (yy > y) { colHits++; if (yy > colTop) colTop = yy; if (yy < colLow) colLow = yy; }
   }
-  return (hits & 1) === 1 ? top : NaN;
 }
+// Height of the highest surface crossing above the point if it is inside, else NaN.
+function butterCeilingAbove(x, y, z) { scanColumn(x, y, z); return (colHits & 1) === 1 ? colTop : NaN; }
 function insideButter(x, y, z) { return !Number.isNaN(butterCeilingAbove(x, y, z)); }
 
-// Anything that got through the shell (rare) is lifted straight up to sit on the top
-// skin above where it was, keeping its sideways motion; no sideways teleports.
-function rescueTrappedBodies() {
+// Rest-shape thickness of the butter column at world (x, z) (0 outside its footprint).
+function restThicknessAt(x, z) {
+  const R = butter.R, dx = x - butter.cx, dz = z - butter.cz;
+  const lx = R[0] * dx + R[6] * dz, lz = R[2] * dx + R[8] * dz;
+  const s = 1 - Math.pow(Math.abs(lx / HALF[0]), SHAPE_EXP) - Math.pow(Math.abs(lz / HALF[2]), SHAPE_EXP);
+  return s > 0 ? 2 * HALF[1] * Math.pow(s, 1 / SHAPE_EXP) : 0;
+}
+// How far a body reaches below / above its centre.
+function bodyBelow(b) {
+  let below = 0;
+  for (const p of b.parts) {
+    if (p.type === 0) below = Math.max(below, b.y - p.wy + p.r);
+    else { boxSamples(b, p); for (let k = 1; k < 24; k += 3) below = Math.max(below, b.y - p.ws[k]); }
+  }
+  return below;
+}
+function bodyAbove(b) {
+  let above = 0;
+  for (const p of b.parts) {
+    if (p.type === 0) above = Math.max(above, p.wy + p.r - b.y);
+    else { boxSamples(b, p); for (let k = 1; k < 24; k += 3) above = Math.max(above, p.ws[k] - b.y); }
+  }
+  return above;
+}
+// The lowest a held object (or the fingertip) may be driven while it is over the butter:
+// it can flatten the column under it to about a third of its rest thickness, but never
+// punch through it. Returns the minimum height of the body's centre (or -Infinity).
+const PRESS_KEEP = 0.33;
+function pressFloorFor(b) {
+  if (b.ghost) return -Infinity;
+  butterBounds();
+  scanColumn(b.x, -1, b.z);
+  if (colHits < 2 || b.y < 0.5 * (colLow + colTop)) return -Infinity;      // not above the butter
+  const H = restThicknessAt(b.x, b.z);
+  return H > 0 ? colLow + PR + PRESS_KEEP * H + bodyBelow(b) : -Infinity;
+}
+
+// Anything that got into the butter anyway (or underneath it, hidden) becomes a "ghost":
+// it stops colliding with the butter and is eased up and out through the top skin a few
+// units per step, so there are no teleports or pops. Held bodies are left to the hand.
+const GHOST_RISE = 6;
+function covered(b) {                     // the butter is over the body on all four sides
+  const r = 0.7 * Math.min(b.radius, 40);
+  for (let k = 0; k < 4; k++) {
+    scanColumn(b.x + (k === 0 ? r : k === 1 ? -r : 0), b.y, b.z + (k === 2 ? r : k === 3 ? -r : 0));
+    if (colHits < 2) return false;
+  }
+  return true;
+}
+const GHOST_AFTER = 4;                    // steps a body must stay inside before it turns into a ghost
+function rescueTrappedBodies(dt) {
   butterBounds();
   for (const b of bodies) {
-    const top = butterCeilingAbove(b.x, b.y, b.z);
-    if (Number.isNaN(top)) continue;
+    if (b.asleep) continue;
     b.updateWorld();
-    let below = 0;                                     // how far the body reaches below its centre
-    for (const p of b.parts) {
-      if (p.type === 0) below = Math.max(below, b.y - p.wy + p.r);
-      else { boxSamples(b, p); for (let k = 1; k < 24; k += 3) below = Math.max(below, b.y - p.ws[k]); }
+    scanColumn(b.x, b.y, b.z);
+    let trapped = (colHits & 1) === 1;
+    if (!trapped && colHits >= 2 && colLow - (b.y + bodyAbove(b)) < PR + 4 && covered(b)) trapped = true;
+    if (!trapped && b.ghost) {
+      scanColumn(b.x, b.y - bodyBelow(b), b.z);                // still overlapping the skin?
+      trapped = (colHits & 1) === 1;
     }
-    const ny = Math.min(top + below + PR + 1, ARENA.top - b.radius);
-    const dy = ny - b.y;
-    b.y += dy; b.py += dy; b.sy += dy;
+    // a pocket that pinches shut for a moment is not a capture: give it a few steps
+    b.insideSteps = trapped ? (b.insideSteps || 0) + 1 : 0;
+    b.ghost = trapped && (b.ghost || b.insideSteps >= GHOST_AFTER);
+    if (!b.ghost) {
+      // resting on the butter: it can sink in deep, but the column under it never gives way
+      if (trapped || b.held || b.kind === 'finger' || !b.onButter) continue;
+      const fy = pressFloorFor(b);
+      if (b.y < fy) {
+        const dy = Math.min(fy - b.y, GHOST_RISE);
+        b.y += dy; b.py += dy;
+        if (b.vy < 0) b.vy = 0;
+        b.updateWorld();
+      }
+      continue;
+    }
+    stats.ghostSteps++;
+    if (b.held || b.kind === 'finger') continue;
+    const dy = Math.max(0, Math.min(GHOST_RISE, ARENA.top - b.radius - b.y));
+    b.y += dy; b.py += dy;
     if (b.vy < 0) b.vy = 0;
+    const k = Math.exp(-10 * dt);
+    b.vx *= k; b.vz *= k;
     b.updateWorld();
   }
 }
+const stats = { ghostSteps: 0 };
 
 /* =========================================================================
    4. MOUSE INTERACTION
@@ -1373,7 +1699,8 @@ function rescueTrappedBodies() {
    ========================================================================= */
 
 const PINCH_RADIUS = 46, PINCH_COMPLIANCE = 1 / 380;
-const WHOLE_RADIUS = 230, WHOLE_COMPLIANCE = 1 / 900;
+const WHOLE_RADIUS = 230, WHOLE_COMPLIANCE = 1 / 900, WHOLE_MIN_SQUASH = 0.4;
+const RELEASE_TIME = 0.4, RELEASE_GAIN = 250;   // after letting go, recoil can't launch it faster than the throw + this
 const OBJECT_COMPLIANCE = 1 / 1600;
 const GRAB_MAX_MOVE = 3;                 // max correction per substep (caps the force)
 const FINGER_R = 24, FINGER_MASS = 4, FINGER_ACCEL = 24000;
@@ -1394,7 +1721,9 @@ const pointer = {
 };
 const grab = {
   n: 0, idx: new Int32Array(2048), wt: new Float64Array(2048), ox: new Float64Array(2048), oy: new Float64Array(2048), oz: new Float64Array(2048),
-  compliance: 0, body: null, lx: 0, ly: 0, lz: 0, minY: 0,
+  compliance: 0, body: null, lx: 0, ly: 0, lz: 0,
+  y0: 0, base: 0, onFloor: false, dcx: 0, dcz: 0,   // whole grab: grab height, butter bottom, centre offset
+  floorY: -Infinity,                     // lowest centre height for a held object over the butter (this step)
 };
 const touches = new Map();               // active touch pointers on the background (pinch-zoom)
 let finger = null;
@@ -1598,6 +1927,8 @@ function beginOrbit(sx, sy) {
 function beginObjectGrab(b, x, y, z) {
   pointer.mode = 'object';
   grab.body = b; b.held = true;
+  b.impact = 0; b.wasOnButter = false; b.anchored = false;
+  wakeBody(b);
   b.updateWorld();
   const R = b.R, dx = x - b.x, dy = y - b.y, dz = z - b.z;
   grab.lx = R[0] * dx + R[3] * dy + R[6] * dz; grab.ly = R[1] * dx + R[4] * dy + R[7] * dz; grab.lz = R[2] * dx + R[5] * dy + R[8] * dz;
@@ -1618,9 +1949,9 @@ function beginButterGrab(x, y, z, whole) {
     addGrab(bi, 1, x, y, z);
   }
   grab.compliance = whole ? WHOLE_COMPLIANCE : PINCH_COMPLIANCE;
-  // pressing a whole grab down can flatten the butter to ~40% of its height, not into the floor
   butterBounds();
-  grab.minY = PR + 0.4 * Math.max(0, y - (bb.minY - PR));
+  grab.y0 = y; grab.base = bb.minY; grab.onFloor = bb.minY < PR + 6;
+  grab.dcx = butter.cx - x; grab.dcz = butter.cz - z;
   setDragPlane(x, y, z);
 }
 function addGrab(i, w, x, y, z) {
@@ -1643,7 +1974,7 @@ function endInteraction() {
   const v = throwVelocity(), mode = pointer.mode;
   if (mode === 'object' && grab.body) {
     const b = grab.body;
-    b.held = false;
+    b.held = false; b.impact = 0; b.wasOnButter = false;
     b.vx = lerp(b.vx, v.x, 0.6); b.vy = lerp(b.vy, v.y, 0.6); b.vz = lerp(b.vz, v.z, 0.6);
   } else if (mode === 'whole') {
     let vx = 0, vy = 0, vz = 0;
@@ -1651,6 +1982,7 @@ function endInteraction() {
     vx /= butter.n; vy /= butter.n; vz /= butter.n;
     const dx = (v.x - vx) * 0.7, dy = (v.y - vy) * 0.7, dz = (v.z - vz) * 0.7;
     for (let i = 0; i < butter.n; i++) { BVX[i] += dx; BVY[i] += dy; BVZ[i] += dz; }
+    butter.releaseT = RELEASE_TIME; butter.releaseV[0] = vx + dx; butter.releaseV[1] = vy + dy; butter.releaseV[2] = vz + dz;
   } else if (mode === 'pinch') {
     for (let k = 0; k < grab.n; k++) {
       const i = grab.idx[k], f = 0.45 * grab.wt[k];
@@ -1668,22 +2000,23 @@ function endInteraction() {
 function solveGrab(h) {
   const tx = pointer.tx, ty = pointer.ty, tz = pointer.tz, ih2 = 1 / (h * h);
   if (pointer.mode === 'whole') {
-    // Hold the butter as a whole: one shared translation pulls the grabbed region toward
-    // the target, so its shape stays free to squash against the floor and bulge sideways
-    // (pinning every particle to a fixed offset would crush its volume).
-    const gy = Math.max(ty, grab.minY);
-    let sw = 0, ex = 0, ey = 0, ez = 0;
-    for (let k = 0; k < grab.n; k++) {
-      const i = grab.idx[k], w = grab.wt[k];
-      ex += w * (tx + grab.ox[k] - BX[i]); ey += w * (gy + grab.oy[k] - BY[i]); ez += w * (tz + grab.oz[k] - BZ[i]); sw += w;
-    }
-    ex /= sw; ey /= sw; ez /= sw;
-    const em = Math.sqrt(ex * ex + ey * ey + ez * ez);
-    if (em > GRAB_MAX_MOVE) { const s = GRAB_MAX_MOVE / em; ex *= s; ey *= s; ez *= s; }
-    for (let k = 0; k < grab.n; k++) {
-      const i = grab.idx[k];
-      const f = BW[i] / (BW[i] + grab.compliance / grab.wt[k] * ih2) * (butter.onFloor[i] ? 0.2 : 1);
-      BX[i] += ex * f; BY[i] += ey * f; BZ[i] += ez * f;
+    // Hold the butter as a whole: every grabbed particle is pulled softly toward its spot in
+    // the shape the butter had when grabbed, carried by the hand (so it keeps its orientation
+    // and doesn't tip over when dragged along the floor). Pushing down squashes that target
+    // shape toward the floor and widens it to match, so its volume is kept; it flattens to
+    // WHOLE_MIN_SQUASH of its height at most, and target spots never go through the walls.
+    let s = 1;
+    if (grab.onFloor && ty < grab.y0) s = Math.max(WHOLE_MIN_SQUASH, (ty - grab.base) / Math.max(1, grab.y0 - grab.base));
+    const k = 1 / Math.sqrt(s) - 1, XL = ARENA.x - PR, ZL = ARENA.z - PR, YT = ARENA.top - PR;
+    for (let q = 0; q < grab.n; q++) {
+      const i = grab.idx[q], ox = grab.ox[q], oz = grab.oz[q];
+      const gx = clamp(tx + ox + (ox - grab.dcx) * k, -XL, XL), gz = clamp(tz + oz + (oz - grab.dcz) * k, -ZL, ZL);
+      const gy = clamp(s < 1 ? grab.base + (grab.y0 + grab.oy[q] - grab.base) * s : ty + grab.oy[q], PR, YT);
+      const f = BW[i] / (BW[i] + grab.compliance / grab.wt[q] * ih2) * (butter.onFloor[i] ? 0.2 : 1);
+      let mx = (gx - BX[i]) * f, my = (gy - BY[i]) * f, mz = (gz - BZ[i]) * f;
+      const m = Math.sqrt(mx * mx + my * my + mz * mz);
+      if (m > GRAB_MAX_MOVE) { const c = GRAB_MAX_MOVE / m; mx *= c; my *= c; mz *= c; }
+      BX[i] += mx; BY[i] += my; BZ[i] += mz;
     }
   } else if (pointer.mode === 'pinch') {
     for (let k = 0; k < grab.n; k++) {
@@ -1698,7 +2031,8 @@ function solveGrab(h) {
   } else if (pointer.mode === 'object' && grab.body) {
     const b = grab.body, R = b.R;
     const rx = R[0] * grab.lx + R[1] * grab.ly + R[2] * grab.lz, ry = R[3] * grab.lx + R[4] * grab.ly + R[5] * grab.lz, rz = R[6] * grab.lx + R[7] * grab.ly + R[8] * grab.lz;
-    const dx = tx - (b.x + rx), dy = ty - (b.y + ry), dz = tz - (b.z + rz), d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const gy = Math.max(ty, grab.floorY + ry);                // pressing into the butter dents it, never punches through
+    const dx = tx - (b.x + rx), dy = gy - (b.y + ry), dz = tz - (b.z + rz), d = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (d < 1e-6) return;
     const nx = dx / d, ny = dy / d, nz = dz / d;
     setBody(SA, b, b.x + rx, b.y + ry, b.z + rz);
@@ -1731,7 +2065,8 @@ function grabDamping(dt) {
 function driveFinger(h) {
   const f = finger, p = f.parts[0];
   if (p.r < FINGER_R) { p.r = Math.min(FINGER_R, p.r + 260 * h); f.radius = p.r; }
-  let vx = (pointer.tx - f.x) / 0.025, vy = (pointer.ty - f.y) / 0.025, vz = (pointer.tz - f.z) / 0.025;
+  const ty = Math.max(pointer.ty, grab.floorY);              // a deep poke, never through the butter
+  let vx = (pointer.tx - f.x) / 0.025, vy = (ty - f.y) / 0.025, vz = (pointer.tz - f.z) / 0.025;
   const sp = Math.hypot(vx, vy, vz);
   if (sp > 3500) { const k = 3500 / sp; vx *= k; vy *= k; vz *= k; }
   let ax = vx - f.vx, ay = vy - f.vy, az = vz - f.vz;
@@ -1833,6 +2168,7 @@ function resetAll() {
 }
 
 // After the substeps: drag, spin damping, how objects ride on the butter, and resting.
+const ANCHOR_K = 220, ANCHOR_D = 30, ANCHOR_MAX_ACCEL = 1100, ANCHOR_BREAK = 30;
 function settleBody(b, dt) {
   const touching = b.cc > 0;
   if (b.kind !== 'finger') {
@@ -1853,8 +2189,10 @@ function settleBody(b, dt) {
       }
       b.contactT += dt;
       // viscous, tacky butter: an object resting on it moves with the butter body (sideways it
-      // doesn't roll off; along the normal it sinks / rises slowly instead of bobbing)
-      const fT = 1 - Math.exp(-tune.sink * dt), fN = 1 - Math.exp(-0.5 * tune.sink * dt);
+      // doesn't roll off; along the normal it sinks / rises slowly instead of bobbing). Only
+      // contacts that carry the object do this; brushing past the side is plain friction.
+      const support = smoothstep(0.1, 0.6, uy);
+      const fT = (1 - Math.exp(-tune.sink * dt)) * support, fN = (1 - Math.exp(-0.5 * tune.sink * dt)) * support;
       const rx = b.vx - cx, ry = b.vy - cy, rz = b.vz - cz, rn = rx * ux + ry * uy + rz * uz;
       const bn = (b.vx - cx) * ux + (b.vy - cy) * uy + (b.vz - cz) * uz;
       b.vx -= (rx - rn * ux) * fT + ux * bn * fN; b.vy -= (ry - rn * uy) * fT + uy * bn * fN; b.vz -= (rz - rn * uz) * fT + uz * bn * fN;
@@ -1862,22 +2200,58 @@ function settleBody(b, dt) {
       // object's own restitution allows (otherwise everything would rebound alike). Only the
       // outward push gained this step is limited, so objects still fly off a butter that stops.
       const gain = (b.vx - b.svx) * ux + (b.vy - b.svy + gravity() * (b.noGravity ? 0 : dt)) * uy + (b.vz - b.svz) * uz;
-      const vout = (b.vx - cx) * ux + (b.vy - cy) * uy + (b.vz - cz) * uz, cap = Math.max(b.e, 0.12) * b.impact;
+      // (the soft butter swallows more of a hit than the hard floor: only bouncy objects keep theirs)
+      const vout = (b.vx - cx) * ux + (b.vy - cy) * uy + (b.vz - cz) * uz, cap = (b.e > 0.5 ? b.e : Math.max(0.6 * b.e, 0.1)) * b.impact;
       if (gain > 0 && vout > cap) { const k = Math.min(gain, vout - cap); b.vx -= ux * k; b.vy -= uy * k; b.vz -= uz * k; }
       b.lux = ux; b.luy = uy; b.luz = uz; b.lvx = cx; b.lvy = cy; b.lvz = cz;
+      // stiction: once settled, it keeps its spot on the butter (in the butter's own frame)
+      // while the butter jiggles or leans, until something pushes it hard enough to tear free
+      const R = butter.R;
+      const tx = (b.vx - cx) - ux * ((b.vx - cx) * ux + (b.vy - cy) * uy + (b.vz - cz) * uz);
+      const tz = (b.vz - cz) - uz * ((b.vx - cx) * ux + (b.vy - cy) * uy + (b.vz - cz) * uz);
+      if (!b.anchored) {
+        if (support > 0.5 && b.contactT > 0.15 && Math.hypot(tx, tz) < 40) {
+          b.anchored = true;
+          b.ax = R[0] * ox + R[3] * oy + R[6] * oz; b.ay = R[1] * ox + R[4] * oy + R[7] * oz; b.az = R[2] * ox + R[5] * oy + R[8] * oz;
+        }
+      } else {
+        const gx = butter.cx + R[0] * b.ax + R[1] * b.ay + R[2] * b.az - b.x, gz = butter.cz + R[6] * b.ax + R[7] * b.ay + R[8] * b.az - b.z;
+        const off = Math.hypot(gx, gz);
+        if (off > ANCHOR_BREAK || support < 0.3) b.anchored = false;
+        else {
+          let ax = gx * ANCHOR_K - tx * ANCHOR_D, az = gz * ANCHOR_K - tz * ANCHOR_D;
+          const am = Math.hypot(ax, az), lim = ANCHOR_MAX_ACCEL;
+          if (am > lim) {
+            if (off > 4) b.anchored = false;                     // pulled harder than it can hold
+            ax *= lim / am; az *= lim / am;
+          }
+          b.vx += ax * dt; b.vz += az * dt;
+        }
+      }
     } else if (b.wasOnButter && !b.held && b.e > 0.5) {
       // leaving the butter: bouncy objects get their spring back
       const vout = (b.vx - b.lvx) * b.lux + (b.vy - b.lvy) * b.luy + (b.vz - b.lvz) * b.luz, want = b.e * 0.8 * b.impact;
       if (vout > 0 && vout < want) { const k = want - vout; b.vx += b.lux * k; b.vy += b.luy * k; b.vz += b.luz * k; }
     }
-    // resting on the floor: snap tiny residual motion to zero so nothing creeps forever
-    const sp = Math.hypot(b.vx, b.vy, b.vz), spin = Math.hypot(b.wx, b.wy, b.wz);
-    b.restTime = b.floorContact && !touching && !b.held && sp < 5 && spin < 0.08 ? b.restTime + dt : 0;
-    if (b.restTime > 0.25) { b.vx = b.vy = b.vz = 0; b.wx = b.wy = b.wz = 0; }
+    if (!touching || b.held) b.anchored = false;
+    // resting on the floor or on other bodies (not the living butter): fall asleep once it has
+    // been nearly still for SLEEP_TIME, and has really stayed put over that time (so a box
+    // slowly tipping off an edge still falls)
+    if (!b.asleep) {
+      const sp = Math.hypot(b.vx, b.vy, b.vz), spin = Math.hypot(b.wx, b.wy, b.wz);
+      if (b.held || touching || b.ghost || !(b.floorContact || b.bodyContact) || sp > SLEEP_SPEED || spin > SLEEP_SPIN) b.sleepT = 0;
+      else {
+        if (b.sleepT === 0) { b.sleepX = b.x; b.sleepY = b.y; b.sleepZ = b.z; b.sleepQ[0] = b.q[0]; b.sleepQ[1] = b.q[1]; b.sleepQ[2] = b.q[2]; b.sleepQ[3] = b.q[3]; }
+        b.sleepT += dt;
+        const qd = Math.abs(b.q[0] * b.sleepQ[0] + b.q[1] * b.sleepQ[1] + b.q[2] * b.sleepQ[2] + b.q[3] * b.sleepQ[3]);
+        if (Math.hypot(b.x - b.sleepX, b.y - b.sleepY, b.z - b.sleepZ) > SLEEP_DRIFT || qd < 0.9999) b.sleepT = 0;
+        else if (b.sleepT > SLEEP_TIME) { b.asleep = true; b.vx = b.vy = b.vz = 0; b.wx = b.wy = b.wz = 0; }
+      }
+    }
   }
   b.wasOnButter = touching; b.onButter = touching;
   b.cc = 0; b.cnx = b.cny = b.cnz = 0;
-  b.floorContact = false;
+  b.floorContact = false; b.bodyContact = false;
 }
 
 // ---------- the fixed simulation step (ties sections 1–5 together) ----------
@@ -1893,6 +2267,13 @@ function step(dt) {
   const bvx0 = butter.vcx, bvy0 = butter.vcy, bvz0 = butter.vcz;
   vertexNormals(BX, BY, BZ);              // surface normals for the curvature memory (once per step is plenty)
   const holding = pointer.mode === 'pinch' || pointer.mode === 'whole' || pointer.mode === 'object' || pointer.mode === 'finger';
+  // collision candidates for this step, and how deep a held object / the fingertip may press
+  butterBounds();
+  let vp2 = 0;
+  for (let i = 0; i < butter.ns; i++) { const v2 = BVX[i] * BVX[i] + BVY[i] * BVY[i] + BVZ[i] * BVZ[i]; if (v2 > vp2) vp2 = v2; }
+  const vpMax = Math.sqrt(vp2), extra = holding ? GRAB_MAX_MOVE * 1.5 * SUBSTEPS : 0;
+  for (const b of bodies) butterCandidates(b, vpMax, extra);
+  grab.floorY = pointer.mode === 'object' && grab.body ? pressFloorFor(grab.body) : pointer.mode === 'finger' && finger ? pressFloorFor(finger) : -Infinity;
 
   for (let s = 0; s < SUBSTEPS; s++) {
     const f = (s + 1) / SUBSTEPS;
@@ -1908,8 +2289,9 @@ function step(dt) {
       BX[i] += BVX[i] * h; BY[i] += BVY[i] * h; BZ[i] += BVZ[i] * h;
     }
     for (const b of bodies) {
-      if (!b.noGravity) b.vy -= g * h;
       b.px = b.x; b.py = b.y; b.pz = b.z;
+      if (b.asleep) { b.pq[0] = b.q[0]; b.pq[1] = b.q[1]; b.pq[2] = b.q[2]; b.pq[3] = b.q[3]; continue; }
+      if (!b.noGravity) b.vy -= g * h;
       b.pq[0] = b.q[0]; b.pq[1] = b.q[1]; b.pq[2] = b.q[2]; b.pq[3] = b.q[3];
       b.x += b.vx * h; b.y += b.vy * h; b.z += b.vz * h;
       quatRotate(b.q, b.wx * h, b.wy * h, b.wz * h);
@@ -1934,6 +2316,7 @@ function step(dt) {
       BVX[i] = vx; BVY[i] = vy; BVZ[i] = vz;
     }
     for (const b of bodies) {
+      if (b.asleep) continue;
       b.vx = (b.x - b.px) * ih; b.vy = (b.y - b.py) * ih; b.vz = (b.z - b.pz) * ih;
       quatDelta(b.q, b.pq);
       b.wx = tX * ih; b.wy = tY * ih; b.wz = tZ * ih;
@@ -1950,7 +2333,7 @@ function step(dt) {
   for (const b of bodies) settleBody(b, dt);
   updatePlasticity(dt);
   measureSquash();
-  rescueTrappedBodies();
+  rescueTrappedBodies(dt);
 
   // tangle watchdog: folded patches → ramp up shape memory until it has unfolded
   // (gently while the user is holding it); a long-lived fold relaxes the stiff limits
@@ -2707,7 +3090,7 @@ for (const [key, fmt] of sliderDefs) {
 }
 
 // ---- buttons ----
-function setGravity(on) { params.gravityOn = on; $('gravityBtn').classList.toggle('on', on); }
+function setGravity(on) { params.gravityOn = on; wakeAll(); $('gravityBtn').classList.toggle('on', on); }
 $('gravityBtn').addEventListener('click', () => setGravity(!params.gravityOn));
 $('resetBtn').addEventListener('click', resetAll);
 $('clearObjects').addEventListener('click', clearObjects);
@@ -2952,6 +3335,7 @@ window.butterToy3d = {
   spawn: spawnObject, drop: dropObject, reset: resetAll,
   get shake() { return shake; },
   arrays: () => ({ BX, BY, BZ, BVX, BVY, BVZ, stick: butter.stick }),
+  stats,
   flipped: () => countFlipped(),
   state() {
     butterBounds();
