@@ -1,0 +1,2973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Squishy Butter 3D</title>
+<style>
+  :root {
+    --ink: #3b3731;
+    --muted: #8b8478;
+    --panel: rgba(255, 253, 249, 0.9);
+    --line: rgba(70, 55, 30, 0.13);
+    --btn: #f4f0e8;
+    --btn-hover: #ece6da;
+    --btn-active: #e2dacb;
+    --accent: #cf9a33;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #ebe6de; color: var(--ink);
+    font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  #panel {
+    position: fixed; top: 14px; left: 14px; width: 238px; z-index: 2;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(60, 45, 20, 0.10), 0 1px 3px rgba(60, 45, 20, 0.08);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    max-height: calc(100% - 28px); overflow: auto;
+  }
+  #panel .head { display: flex; align-items: center; justify-content: space-between; padding: 9px 9px 9px 14px; font-weight: 600; }
+  #panel .title { display: flex; align-items: center; gap: 9px; }
+  #panel .logo {
+    width: 19px; height: 13px; border-radius: 5px; background: linear-gradient(#fce48f, #efc24c);
+    box-shadow: inset 0 -1.5px 0 rgba(180, 120, 20, .35), 0 0 0 1px rgba(180, 120, 20, .4);
+  }
+  .icon-btn {
+    width: 26px; height: 26px; border: none; border-radius: 8px; background: transparent; color: var(--muted);
+    font: 600 15px/1 system-ui, sans-serif; cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--btn-hover); color: var(--ink); }
+  #panel .body { padding: 0 12px 12px; }
+  #panel.collapsed .body { display: none; }
+  .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin: 8px 2px 6px; font-weight: 650; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  button.b {
+    appearance: none; border: 1px solid var(--line); background: var(--btn); color: var(--ink);
+    border-radius: 9px; padding: 7px 8px; font: inherit; cursor: pointer; display: flex; align-items: center;
+    gap: 7px; justify-content: flex-start; transition: background .12s, transform .06s; touch-action: none; white-space: nowrap;
+  }
+  button.b:hover { background: var(--btn-hover); }
+  button.b:active { background: var(--btn-active); transform: translateY(1px); }
+  button:focus { outline: none; }
+  button:focus-visible { outline: 2px solid rgba(207, 154, 51, 0.7); outline-offset: 1px; }
+  button.b.center { justify-content: center; }
+  button.b.muted { color: var(--muted); justify-content: center; }
+  .sw { width: 14px; height: 14px; border-radius: 50%; flex: none; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .14), 0 0 0 1px rgba(0, 0, 0, .12); }
+  .sw-small { background: #6f9be0; }
+  .sw-metal { background: radial-gradient(circle at 35% 30%, #f6f7f9, #9aa1ab 55%, #555c66); }
+  .sw-cube { border-radius: 3px; background: #e5866a; }
+  .sw-rubber { background: linear-gradient(#e2554d 0 36%, #f3e2c2 36% 64%, #e2554d 64%); }
+  .sw-hammer {
+    border-radius: 2px; box-shadow: none;
+    background: linear-gradient(90deg, transparent 0 38%, #b98451 38% 62%, transparent 62%) 0 5px / 100% 9px no-repeat,
+                linear-gradient(#6a727c, #6a727c) 0 0 / 100% 6px no-repeat;
+  }
+  .seg { display: grid; grid-template-columns: 1fr 1fr 1fr; background: var(--btn); border: 1px solid var(--line); border-radius: 9px; padding: 2px; gap: 2px; }
+  .seg button { border: none; background: transparent; border-radius: 7px; padding: 5px 0; font: inherit; color: var(--muted); cursor: pointer; }
+  .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(60, 45, 20, .16); }
+  .slider { display: grid; grid-template-columns: 1fr auto; align-items: center; margin: 5px 2px 1px; }
+  .slider output { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .slider input { grid-column: 1 / -1; width: 100%; margin: 3px 0 2px; accent-color: var(--accent); cursor: pointer; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .row .wide { grid-column: 1 / -1; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #c9c1b3; flex: none; }
+  .on > .dot { background: #79ad5f; }
+  #fps {
+    position: fixed; top: 12px; right: 14px; z-index: 2; pointer-events: none;
+    font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted);
+    background: rgba(255, 253, 249, .72); border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px;
+  }
+  #hint {
+    position: fixed; left: calc(50% + 126px); bottom: 14px; transform: translateX(-50%); z-index: 3; pointer-events: none;
+    width: max-content; max-width: calc(100% - 300px); text-align: center;
+    color: rgba(70, 60, 45, .78); font-size: 12.5px; background: rgba(255, 253, 249, .72);
+    border-radius: 14px; padding: 6px 14px; transition: opacity 1.2s;
+  }
+  #hint.gone { opacity: 0; }
+  #nogl {
+    position: fixed; inset: 0; display: grid; place-items: center; z-index: 5; background: #ebe6de;
+    color: var(--ink); font-size: 15px; text-align: center; padding: 24px;
+  }
+  #nogl[hidden] { display: none; }
+  @media (max-width: 760px) {
+    #hint { left: 50%; max-width: calc(100% - 32px); }
+  }
+  @media (max-width: 640px) {
+    #panel { width: 214px; top: 10px; left: 10px; }
+    .grid2 button.b { min-width: 0; padding: 6px; gap: 5px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div id="panel">
+  <div class="head">
+    <span class="title"><span class="logo"></span>Squishy Butter 3D</span>
+    <button id="collapse" class="icon-btn" title="Hide / show panel (H)">–</button>
+  </div>
+  <div class="body">
+    <div class="label">Objects · click or drag out</div>
+    <div class="grid2">
+      <button class="b spawn" data-kind="small" title="Small ball (1)"><i class="sw sw-small"></i>Small ball</button>
+      <button class="b spawn" data-kind="metal" title="Heavy metal ball (2)"><i class="sw sw-metal"></i>Metal ball</button>
+      <button class="b spawn" data-kind="cube" title="Cube (3)"><i class="sw sw-cube"></i>Cube</button>
+      <button class="b spawn" data-kind="rubber" title="Rubber ball (4)"><i class="sw sw-rubber"></i>Rubber ball</button>
+      <button class="b spawn" data-kind="hammer" title="Hammer (5)"><i class="sw sw-hammer"></i>Hammer</button>
+      <button class="b muted" id="clearObjects" title="Remove all objects">Clear</button>
+    </div>
+
+    <div class="label">Grab mode</div>
+    <div class="seg" id="grabSeg">
+      <button data-mode="pinch" class="on" title="Grab the exact spot and stretch it">Pinch</button>
+      <button data-mode="whole" title="Grab the whole butter to fling it (or Shift / right-drag)">Whole</button>
+      <button data-mode="press" title="Poke and press with a fingertip (or Alt-drag)">Press</button>
+    </div>
+
+    <div class="label">Butter</div>
+    <label class="slider"><span>Softness</span><output id="softnessOut"></output>
+      <input type="range" id="softness" min="0" max="1" step="0.01" value="0.5"></label>
+    <label class="slider"><span>Elasticity</span><output id="elasticityOut"></output>
+      <input type="range" id="elasticity" min="0" max="1" step="0.01" value="0.6"></label>
+    <label class="slider"><span>Damping</span><output id="dampingOut"></output>
+      <input type="range" id="damping" min="0" max="1" step="0.01" value="0.4"></label>
+    <label class="slider"><span>Gravity</span><output id="gravityOut"></output>
+      <input type="range" id="gravity" min="200" max="4000" step="50" value="2000"></label>
+    <label class="slider"><span>Butter mass</span><output id="massOut"></output>
+      <input type="range" id="mass" min="0.5" max="10" step="0.1" value="3"></label>
+
+    <div class="row">
+      <button class="b center" id="resetBtn" title="Reset (R)">Reset</button>
+      <button class="b center on" id="gravityBtn" title="Toggle gravity (G)"><i class="dot"></i>Gravity</button>
+      <button class="b center wide" id="fullscreenBtn" title="Fullscreen (F)">Fullscreen</button>
+    </div>
+  </div>
+</div>
+
+<div id="fps">-- FPS</div>
+<div id="hint">Drag the butter to stretch it · Shift / right-drag grabs it whole · Alt-drag pokes · Drag the background to orbit · Scroll to zoom</div>
+<div id="nogl" hidden>This 3D toy needs WebGL 2, which isn't available in this browser.</div>
+
+<script>
+(() => {
+'use strict';
+
+/* =========================================================================
+   1. PHYSICS
+   World, parameters, vector / quaternion helpers, 3D rigid bodies and the
+   generic XPBD contact solver. Units are "world units" (the butter is ~330
+   wide), y is up, the floor is y = 0. A fixed time step is split into small
+   XPBD substeps.
+   ========================================================================= */
+
+const STEP_DT = 1 / 120;          // fixed physics step (s)
+const SUBSTEPS = 8;               // XPBD substeps per step → 960 Hz solver
+const MAX_STEPS_PER_FRAME = 5;    // avoid the spiral of death on slow frames
+const MAX_PARTICLE_SPEED = 6000;  // world units / s
+const MAX_BODY_SPEED = 5500;
+const MAX_BODY_SPIN = 160;        // rad / s (a small ball rolling fast spins ~130 rad/s)
+const BOUNCE_MIN_SPEED = 70;      // slower impacts don't bounce (prevents jitter)
+const TAU = Math.PI * 2;
+
+// the play area: floor y = 0, walls at x = ±ARENA.x and z = ±ARENA.z, invisible ceiling
+const ARENA = { x: 560, z: 380, top: 900 };
+const params = { softness: 0.5, elasticity: 0.6, damping: 0.4, gravity: 2000, mass: 3, gravityOn: true };
+const gravity = () => (params.gravityOn ? params.gravity : 0);
+
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// ---------- quaternion helpers (q = [x, y, z, w]) ----------
+function quatToMat3(q, m) {           // row-major 3×3
+  const x = q[0], y = q[1], z = q[2], w = q[3];
+  m[0] = 1 - 2 * (y * y + z * z); m[1] = 2 * (x * y - z * w);     m[2] = 2 * (x * z + y * w);
+  m[3] = 2 * (x * y + z * w);     m[4] = 1 - 2 * (x * x + z * z); m[5] = 2 * (y * z - x * w);
+  m[6] = 2 * (x * z - y * w);     m[7] = 2 * (y * z + x * w);     m[8] = 1 - 2 * (x * x + y * y);
+}
+function quatNormalize(q) {
+  const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+  q[0] /= l; q[1] /= l; q[2] /= l; q[3] /= l;
+}
+function quatMul(a, b, out) {
+  const ax = a[0], ay = a[1], az = a[2], aw = a[3], bx = b[0], by = b[1], bz = b[2], bw = b[3];
+  out[0] = aw * bx + ax * bw + ay * bz - az * by;
+  out[1] = aw * by - ax * bz + ay * bw + az * bx;
+  out[2] = aw * bz + ax * by - ay * bx + az * bw;
+  out[3] = aw * bw - ax * bx - ay * by - az * bz;
+  return out;
+}
+// apply a small world-space rotation vector (axis * angle) to q
+function quatRotate(q, dx, dy, dz) {
+  const qx = q[0], qy = q[1], qz = q[2], qw = q[3];
+  q[0] += 0.5 * (dx * qw + dy * qz - dz * qy);
+  q[1] += 0.5 * (dy * qw + dz * qx - dx * qz);
+  q[2] += 0.5 * (dz * qw + dx * qy - dy * qx);
+  q[3] += 0.5 * (-dx * qx - dy * qy - dz * qz);
+  quatNormalize(q);
+}
+// rotation vector of q * conj(p) → (tX, tY, tZ)
+function quatDelta(q, p) {
+  const px = -p[0], py = -p[1], pz = -p[2], pw = p[3];
+  const qx = q[0], qy = q[1], qz = q[2], qw = q[3];
+  const x = qw * px + qx * pw + qy * pz - qz * py;
+  const y = qw * py - qx * pz + qy * pw + qz * px;
+  const z = qw * pz + qx * py - qy * px + qz * pw;
+  const w = qw * pw - qx * px - qy * py - qz * pz;
+  const s = w < 0 ? -2 : 2;
+  tX = x * s; tY = y * s; tZ = z * s;
+}
+function quatNlerp(a, b, t, out) {    // for render interpolation
+  const d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3], s = d < 0 ? -1 : 1;
+  for (let k = 0; k < 4; k++) out[k] = a[k] + (b[k] * s - a[k]) * t;
+  quatNormalize(out);
+  return out;
+}
+let tX = 0, tY = 0, tZ = 0;           // scratch output for hot helpers
+
+// ---------- rigid bodies (objects and the "finger" poker) ----------
+class Body {
+  constructor(kind, parts, mass, inertia, opts) {
+    this.kind = kind;
+    this.parts = parts;
+    this.m = mass; this.invM = 1 / mass;
+    this.invI = inertia.map(v => (v > 0 && isFinite(v) ? 1 / v : 0));   // body-frame diagonal
+    this.e = opts.restitution;            // bounciness
+    this.mu = opts.friction;              // friction coefficient
+    this.radius = opts.radius;            // bounding radius (broad phase)
+    this.com = opts.com || [0, 0, 0];     // centre of mass in design coordinates (drawing)
+    this.x = 0; this.y = 0; this.z = 0; this.q = [0, 0, 0, 1];
+    this.vx = 0; this.vy = 0; this.vz = 0; this.wx = 0; this.wy = 0; this.wz = 0;
+    this.px = 0; this.py = 0; this.pz = 0; this.pq = [0, 0, 0, 1];   // pose at substep start
+    this.sx = 0; this.sy = 0; this.sz = 0; this.sq = [0, 0, 0, 1];   // pose at step start (render)
+    this.svx = 0; this.svy = 0; this.svz = 0;                         // velocity at step start
+    this.R = new Float64Array(9);
+    quatToMat3(this.q, this.R);
+    this.held = false; this.noGravity = false;
+    this.onButter = false; this.floorContact = false; this.restTime = 0;
+    // contact patch with the butter (count and summed normal), and bounce bookkeeping
+    this.cc = 0; this.cnx = 0; this.cny = 0; this.cnz = 0;
+    this.wasOnButter = false; this.impact = 0; this.contactT = 0; this.lux = 0; this.luy = 1; this.luz = 0; this.lvx = 0; this.lvy = 0; this.lvz = 0;
+  }
+  // Refresh the rotation matrix and part centres after the pose changed. Box sample
+  // points are re-transformed lazily (boxSamples) only when something needs them.
+  updateWorld() {
+    const R = this.R;
+    quatToMat3(this.q, R);
+    const x = this.x, y = this.y, z = this.z;
+    for (const p of this.parts) {
+      p.wx = x + R[0] * p.ox + R[1] * p.oy + R[2] * p.oz;
+      p.wy = y + R[3] * p.ox + R[4] * p.oy + R[5] * p.oz;
+      p.wz = z + R[6] * p.ox + R[7] * p.oy + R[8] * p.oz;
+      if (p.type === 1) p.dirty = true;
+    }
+  }
+}
+
+// World-space sample points and AABB of a box part (cached until the body moves).
+function boxSamples(b, p) {
+  if (!p.dirty) return;
+  p.dirty = false;
+  const R = b.R, x = b.x, y = b.y, z = b.z, ls = p.ls, ws = p.ws;
+  let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (let k = 0; k < ls.length; k += 3) {
+    const lx = ls[k], ly = ls[k + 1], lz = ls[k + 2];
+    const wx = x + R[0] * lx + R[1] * ly + R[2] * lz;
+    const wy = y + R[3] * lx + R[4] * ly + R[5] * lz;
+    const wz = z + R[6] * lx + R[7] * ly + R[8] * lz;
+    ws[k] = wx; ws[k + 1] = wy; ws[k + 2] = wz;
+    if (k < 24) {                       // the first 8 samples are the corners
+      if (wx < minX) minX = wx; if (wx > maxX) maxX = wx;
+      if (wy < minY) minY = wy; if (wy > maxY) maxY = wy;
+      if (wz < minZ) minZ = wz; if (wz > maxZ) maxZ = wz;
+    }
+  }
+  p.minX = minX; p.minY = minY; p.minZ = minZ; p.maxX = maxX; p.maxY = maxY; p.maxZ = maxZ;
+}
+
+function spherePart(ox, oy, oz, r) { return { type: 0, ox, oy, oz, r, wx: 0, wy: 0, wz: 0 }; }
+
+// Box part (axis-aligned in the body frame). Sample points (corners first, then
+// edges and faces) are used to test it against other boxes.
+function boxPart(ox, oy, oz, hx, hy, hz) {
+  const s = [], h = [hx, hy, hz];
+  for (const a of [-1, 1]) for (const b of [-1, 1]) for (const c of [-1, 1]) s.push(ox + a * hx, oy + b * hy, oz + c * hz);
+  for (let ax = 0; ax < 3; ax++) {                    // 12 edges
+    const u = (ax + 1) % 3, v = (ax + 2) % 3, L = 2 * h[ax], m = Math.max(1, Math.ceil(L / 10));
+    for (const su of [-1, 1]) for (const sv of [-1, 1]) for (let q = 1; q < m; q++) {
+      const p = [0, 0, 0];
+      p[ax] = -h[ax] + L * q / m; p[u] = su * h[u]; p[v] = sv * h[v];
+      s.push(ox + p[0], oy + p[1], oz + p[2]);
+    }
+  }
+  for (let ax = 0; ax < 3; ax++) {                    // 6 faces, interior grid
+    const u = (ax + 1) % 3, v = (ax + 2) % 3;
+    const nu = Math.max(1, Math.round(2 * h[u] / 14)), nv = Math.max(1, Math.round(2 * h[v] / 14));
+    for (const sa of [-1, 1]) for (let i = 1; i < nu; i++) for (let j = 1; j < nv; j++) {
+      const p = [0, 0, 0];
+      p[ax] = sa * h[ax]; p[u] = -h[u] + 2 * h[u] * i / nu; p[v] = -h[v] + 2 * h[v] * j / nv;
+      s.push(ox + p[0], oy + p[1], oz + p[2]);
+    }
+  }
+  const ls = new Float64Array(s);
+  return { type: 1, ox, oy, oz, hx, hy, hz, ls, ws: new Float64Array(ls.length), wx: 0, wy: 0, wz: 0, dirty: true,
+           minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
+}
+
+// Builds a (possibly compound) rigid body; parts are re-centred on the centre of mass.
+function buildBody(kind, spec, props) {
+  let M = 0, cx = 0, cy = 0, cz = 0;
+  for (const s of spec) { M += s.m; cx += s.x * s.m; cy += s.y * s.m; cz += s.z * s.m; }
+  cx /= M; cy /= M; cz /= M;
+  const I = [0, 0, 0], parts = [];
+  let rad = 0;
+  for (const s of spec) {
+    const dx = s.x - cx, dy = s.y - cy, dz = s.z - cz;
+    I[0] += s.m * (dy * dy + dz * dz); I[1] += s.m * (dx * dx + dz * dz); I[2] += s.m * (dx * dx + dy * dy);
+    if (s.shape === 'sphere') {
+      const k = 0.4 * s.m * s.r * s.r;
+      I[0] += k; I[1] += k; I[2] += k;
+      parts.push(spherePart(dx, dy, dz, s.r));
+      rad = Math.max(rad, Math.hypot(dx, dy, dz) + s.r);
+    } else {
+      const a = 2 * s.hx, b = 2 * s.hy, c = 2 * s.hz;
+      I[0] += s.m * (b * b + c * c) / 12; I[1] += s.m * (a * a + c * c) / 12; I[2] += s.m * (a * a + b * b) / 12;
+      parts.push(boxPart(dx, dy, dz, s.hx, s.hy, s.hz));
+      rad = Math.max(rad, Math.hypot(dx, dy, dz) + Math.hypot(s.hx, s.hy, s.hz));
+    }
+  }
+  const inertia = props.noRotation ? [Infinity, Infinity, Infinity] : I;
+  return new Body(kind, parts, M, inertia,
+    { restitution: props.restitution, friction: props.friction, radius: rad, com: [cx, cy, cz] });
+}
+
+// world-space inverse inertia times a vector → (tX, tY, tZ)
+function invInertiaMul(b, x, y, z) {
+  const R = b.R, I = b.invI;
+  const u0 = (R[0] * x + R[3] * y + R[6] * z) * I[0];
+  const u1 = (R[1] * x + R[4] * y + R[7] * z) * I[1];
+  const u2 = (R[2] * x + R[5] * y + R[8] * z) * I[2];
+  tX = R[0] * u0 + R[1] * u1 + R[2] * u2;
+  tY = R[3] * u0 + R[4] * u1 + R[5] * u2;
+  tZ = R[6] * u0 + R[7] * u1 + R[8] * u2;
+}
+
+// ---------- generic XPBD contact solver ----------
+// A contact connects two "sides": the static world, a rigid body (with a lever
+// arm r), or a single butter particle. Every collision type shares the same
+// position solve, friction and restitution code.
+const K_STATIC = 0, K_BODY = 1, K_PART = 2;
+const newSide = () => ({ k: 0, b: null, i: 0, rx: 0, ry: 0, rz: 0 });
+const SA = newSide(), SB = newSide();
+
+// butter particle arrays (allocated in section 2, used by the solver)
+let BX, BY, BZ, BPX, BPY, BPZ, BVX, BVY, BVZ, BW, BSX, BSY, BSZ;
+
+function setStatic(s) { s.k = K_STATIC; s.b = null; }
+function setBody(s, b, px, py, pz) { s.k = K_BODY; s.b = b; s.rx = px - b.x; s.ry = py - b.y; s.rz = pz - b.z; }
+function setParticle(s, i) { s.k = K_PART; s.i = i; }
+
+function sideInvMass(s, nx, ny, nz) {
+  if (s.k === K_BODY) {
+    const cx = s.ry * nz - s.rz * ny, cy = s.rz * nx - s.rx * nz, cz = s.rx * ny - s.ry * nx;
+    invInertiaMul(s.b, cx, cy, cz);
+    return s.b.invM + cx * tX + cy * tY + cz * tZ;
+  }
+  return s.k === K_PART ? BW[s.i] : 0;
+}
+function sideMove(s, Px, Py, Pz) {       // positional impulse
+  if (s.k === K_BODY) {
+    const b = s.b;
+    b.x += Px * b.invM; b.y += Py * b.invM; b.z += Pz * b.invM;
+    invInertiaMul(b, s.ry * Pz - s.rz * Py, s.rz * Px - s.rx * Pz, s.rx * Py - s.ry * Px);
+    quatRotate(b.q, tX, tY, tZ);
+    quatToMat3(b.q, b.R);
+  } else if (s.k === K_PART) {
+    const i = s.i, w = BW[i];
+    BX[i] += Px * w; BY[i] += Py * w; BZ[i] += Pz * w;
+  }
+}
+// Move a side without changing its velocity (current and previous positions together).
+// Used for the part of a deep penetration that should not turn into a launch.
+function sideShift(s, Px, Py, Pz) {
+  if (s.k === K_BODY) {
+    const b = s.b, m = b.invM;
+    b.x += Px * m; b.y += Py * m; b.z += Pz * m; b.px += Px * m; b.py += Py * m; b.pz += Pz * m;
+  } else if (s.k === K_PART) {
+    const i = s.i, w = BW[i];
+    BX[i] += Px * w; BY[i] += Py * w; BZ[i] += Pz * w; BPX[i] += Px * w; BPY[i] += Py * w; BPZ[i] += Pz * w;
+  }
+}
+function sideDisp(s) {                   // displacement of the contact point during this substep
+  if (s.k === K_BODY) {
+    const b = s.b;
+    quatDelta(b.q, b.pq);
+    const ax = tX, ay = tY, az = tZ;
+    tX = b.x - b.px + ay * s.rz - az * s.ry;
+    tY = b.y - b.py + az * s.rx - ax * s.rz;
+    tZ = b.z - b.pz + ax * s.ry - ay * s.rx;
+  } else if (s.k === K_PART) {
+    const i = s.i;
+    tX = BX[i] - BPX[i]; tY = BY[i] - BPY[i]; tZ = BZ[i] - BPZ[i];
+  } else { tX = 0; tY = 0; tZ = 0; }
+}
+function sideVel(s) {
+  if (s.k === K_BODY) {
+    const b = s.b;
+    tX = b.vx + b.wy * s.rz - b.wz * s.ry;
+    tY = b.vy + b.wz * s.rx - b.wx * s.rz;
+    tZ = b.vz + b.wx * s.ry - b.wy * s.rx;
+  } else if (s.k === K_PART) {
+    tX = BVX[s.i]; tY = BVY[s.i]; tZ = BVZ[s.i];
+  } else { tX = 0; tY = 0; tZ = 0; }
+}
+function sideImpulse(s, Jx, Jy, Jz) {    // velocity impulse
+  if (s.k === K_BODY) {
+    const b = s.b;
+    b.vx += Jx * b.invM; b.vy += Jy * b.invM; b.vz += Jz * b.invM;
+    invInertiaMul(b, s.ry * Jz - s.rz * Jy, s.rz * Jx - s.rx * Jz, s.rx * Jy - s.ry * Jx);
+    b.wx += tX; b.wy += tY; b.wz += tZ;
+  } else if (s.k === K_PART) {
+    const w = BW[s.i];
+    BVX[s.i] += Jx * w; BVY[s.i] += Jy * w; BVZ[s.i] += Jz * w;
+  }
+}
+
+// Impacting contacts are remembered so restitution can be applied after the
+// velocities have been derived from the corrected positions.
+const bounceRecs = [];
+let bounceCount = 0;
+function copySide(d, s) { d.k = s.k; d.b = s.b; d.i = s.i; d.rx = s.rx; d.ry = s.ry; d.rz = s.rz; }
+function recordBounce(nx, ny, nz, vnPre, e) {
+  let r = bounceRecs[bounceCount];
+  if (!r) { r = { A: newSide(), B: newSide(), nx: 0, ny: 0, nz: 0, vnPre: 0, e: 0 }; bounceRecs.push(r); }
+  copySide(r.A, SA); copySide(r.B, SB);
+  r.nx = nx; r.ny = ny; r.nz = nz; r.vnPre = vnPre; r.e = e;
+  bounceCount++;
+}
+
+// Resolve a penetration `depth` along normal n (pointing from side A to side B),
+// then apply position-level static / kinetic friction (Coulomb, in impulse terms).
+// Only the first DEPTH_VEL_LIMIT of a deep overlap is allowed to create velocity;
+// the rest is removed as a pure shift, so overlaps never catapult anything.
+const DEPTH_VEL_LIMIT = 0.35;
+function resolveContact(nx, ny, nz, depth, muS, muK, e) {
+  const wA = sideInvMass(SA, nx, ny, nz), wB = sideInvMass(SB, nx, ny, nz), wSum = wA + wB;
+  if (wSum < 1e-12 || depth <= 0) return 0;
+  sideVel(SB); const bx = tX, by = tY, bz = tZ;
+  sideVel(SA); const vnPre = (bx - tX) * nx + (by - tY) * ny + (bz - tZ) * nz;
+  // already separating? then the rest of the overlap is removed without adding more speed
+  const room = Math.max(0, DEPTH_VEL_LIMIT - Math.max(0, vnPre) * STEP_DT / SUBSTEPS);
+  const dv = Math.min(depth, room), dl = Math.max(dv, Math.min(depth, 0.02)) / wSum;
+  sideMove(SA, -nx * dl, -ny * dl, -nz * dl);
+  sideMove(SB, nx * dl, ny * dl, nz * dl);
+  if (depth > dl * wSum) {
+    const ls = depth / wSum - dl;
+    sideShift(SA, -nx * ls, -ny * ls, -nz * ls);
+    sideShift(SB, nx * ls, ny * ls, nz * ls);
+  }
+  if (muS > 0) {
+    sideDisp(SB); let rx = tX, ry = tY, rz = tZ;
+    sideDisp(SA); rx -= tX; ry -= tY; rz -= tZ;
+    const rn = rx * nx + ry * ny + rz * nz;
+    let ux = rx - rn * nx, uy = ry - rn * ny, uz = rz - rn * nz;
+    const tl = Math.sqrt(ux * ux + uy * uy + uz * uz);
+    if (tl > 1e-9) {
+      ux /= tl; uy /= tl; uz /= tl;
+      const wt = sideInvMass(SA, ux, uy, uz) + sideInvMass(SB, ux, uy, uz);
+      if (wt > 1e-12) {
+        const lt = tl / wt;                                // tangential impulse needed to stop sliding
+        const d = lt < muS * dl ? lt : Math.min(muK * dl, lt);
+        sideMove(SA, ux * d, uy * d, uz * d);
+        sideMove(SB, -ux * d, -uy * d, -uz * d);
+      }
+    }
+  }
+  if (e > 0 && vnPre < -BOUNCE_MIN_SPEED) recordBounce(nx, ny, nz, vnPre, e);
+  return dl;
+}
+
+// Velocity pass: give impacting contacts their restitution.
+function solveBounces() {
+  for (let k = 0; k < bounceCount; k++) {
+    const r = bounceRecs[k], nx = r.nx, ny = r.ny, nz = r.nz;
+    sideVel(r.B); const bx = tX, by = tY, bz = tZ;
+    sideVel(r.A);
+    const vn = (bx - tX) * nx + (by - tY) * ny + (bz - tZ) * nz, target = -r.e * r.vnPre;
+    if (vn >= target) continue;
+    const W = sideInvMass(r.A, nx, ny, nz) + sideInvMass(r.B, nx, ny, nz);
+    if (W < 1e-12) continue;
+    const J = (target - vn) / W;
+    sideImpulse(r.A, -nx * J, -ny * J, -nz * J);
+    sideImpulse(r.B, nx * J, ny * J, nz * J);
+  }
+  bounceCount = 0;
+}
+
+/* =========================================================================
+   2. SOFT-BODY SIMULATION
+   The butter is a closed surface of ~1000 particles (a rounded-box "pat",
+   like a gel-filled stress toy) around a sparse core of 45 particles, solved
+   with small-step XPBD:
+     • distance constraints on every surface edge, with smooth strain limiting
+       and viscous (strain-rate) damping
+     • spokes from every surface particle to the core, and a soft core lattice:
+       the body resists deep dents locally, like a gel
+     • surface curvature memory (keeps it smooth: no wrinkles, folds pop out)
+     • one global volume constraint → internal pressure, squash = bulge
+     • global 3D shape matching toward a plastic rest shape (shape memory)
+     • (optional bending springs across edges, off by default)
+   The plastic rest shape slowly creeps toward the current shape under
+   sustained load and slowly recovers (slow-rise squishy behaviour).
+   Particles have a radius, so the surface is a thick shell for collisions.
+   A watchdog detects folded (flipped) triangles and temporarily boosts the
+   shape memory until the mesh has unfolded.
+   ========================================================================= */
+
+const HALF = [155, 88, 105];      // particle shell half extents (x, y, z); the drawn surface is PR bigger
+const SHAPE_EXP = 4;              // superellipsoid exponent: a soft rounded block
+const GRID = 18;                  // particle spacing on the surface
+const PR = 10;                    // particle radius (shell thickness for collisions and drawing)
+const MAX_PLASTIC = 45;           // max plastic offset per particle
+const STICK_SQUASH = 0.16;        // global squash level where the butter starts sticking to the floor
+const STICK_LOAD = 22;            // … or local floor pressure (in particle weights)
+const STICK_RANGE = 11;           // how far a stuck particle can be pulled before letting go
+const STICK_STRENGTH = 9;         // adhesion per particle, in particle weights
+const STICK_DECAY = 0.7;          // stickiness fades over time (1/s)
+
+const butter = {
+  n: 0, ns: 0, nt: 0, ne: 0, nEdge: 0, nSolid: 0, edgeKind: null,
+  tris: null, restX: null, restY: null, restZ: null, plX: null, plY: null, plZ: null, restN: null,
+  edges: null, edgeRest: null, vol0: 0, gradX: null, gradY: null, gradZ: null, restExt: [1, 1, 1],
+  stick: null, onFloor: null,
+  cx: 0, cy: 0, cz: 0, q: [0, 0, 0, 1], R: new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+  vcx: 0, vcy: 0, vcz: 0, wx: 0, wy: 0, wz: 0, squash: 0,
+  flipped: 0, tangleTime: 0, smBoost: 0, rescue: false,
+  massSet: -1, aEdge: 0, aBend: 0, aSpoke: 0, aCore: 0, smK: 0, creep: 0, recover: 0, dampK: 0, tau: 0,
+  sub: null,                      // Loop-subdivision topology for drawing
+};
+
+function shapeScale(x, y, z) {    // factor that moves (x, y, z) radially onto the rest surface
+  return Math.pow(Math.pow(Math.abs(x / HALF[0]), SHAPE_EXP) + Math.pow(Math.abs(y / HALF[1]), SHAPE_EXP) +
+    Math.pow(Math.abs(z / HALF[2]), SHAPE_EXP), -1 / SHAPE_EXP);
+}
+
+function buildButterMesh() {
+  // --- particles on the surface of a box lattice, projected onto a superellipsoid ---
+  const NX = Math.round(2 * HALF[0] / GRID), NY = Math.round(2 * HALF[1] / GRID), NZ = Math.round(2 * HALF[2] / GRID);
+  const id = (i, j, k) => (i * (NY + 1) + j) * (NZ + 1) + k;
+  const map = new Int32Array((NX + 1) * (NY + 1) * (NZ + 1)).fill(-1);
+  const P = [];
+  for (let i = 0; i <= NX; i++) for (let j = 0; j <= NY; j++) for (let k = 0; k <= NZ; k++) {
+    if (i > 0 && i < NX && j > 0 && j < NY && k > 0 && k < NZ) continue;
+    const x = -HALF[0] + 2 * HALF[0] * i / NX, y = -HALF[1] + 2 * HALF[1] * j / NY, z = -HALF[2] + 2 * HALF[2] * k / NZ;
+    const s = shapeScale(x, y, z);
+    map[id(i, j, k)] = P.length / 3;
+    P.push(x * s, y * s, z * s);
+  }
+  const n = P.length / 3;
+  const T = [];
+  const quad = (a, b, c, d, alt) => { if (alt) T.push(a, b, c, a, c, d); else T.push(a, b, d, b, c, d); };
+  for (const i of [0, NX]) for (let j = 0; j < NY; j++) for (let k = 0; k < NZ; k++)
+    quad(map[id(i, j, k)], map[id(i, j + 1, k)], map[id(i, j + 1, k + 1)], map[id(i, j, k + 1)], (j + k) & 1);
+  for (const j of [0, NY]) for (let i = 0; i < NX; i++) for (let k = 0; k < NZ; k++)
+    quad(map[id(i, j, k)], map[id(i + 1, j, k)], map[id(i + 1, j, k + 1)], map[id(i, j, k + 1)], (i + k) & 1);
+  for (const k of [0, NZ]) for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++)
+    quad(map[id(i, j, k)], map[id(i + 1, j, k)], map[id(i + 1, j + 1, k)], map[id(i, j + 1, k)], (i + j) & 1);
+  const orient = () => {                           // every triangle faces outward
+    for (let t = 0; t < T.length; t += 3) {
+      const a = T[t], b = T[t + 1], c = T[t + 2];
+      const ux = P[3 * b] - P[3 * a], uy = P[3 * b + 1] - P[3 * a + 1], uz = P[3 * b + 2] - P[3 * a + 2];
+      const vx = P[3 * c] - P[3 * a], vy = P[3 * c + 1] - P[3 * a + 1], vz = P[3 * c + 2] - P[3 * a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const gx = P[3 * a] + P[3 * b] + P[3 * c], gy = P[3 * a + 1] + P[3 * b + 1] + P[3 * c + 1], gz = P[3 * a + 2] + P[3 * b + 2] + P[3 * c + 2];
+      if (nx * gx + ny * gy + nz * gz < 0) { T[t + 1] = c; T[t + 2] = b; }
+    }
+  };
+  orient();
+
+  // --- neighbours, then relax the spacing (smooth, then re-project onto the surface) ---
+  const nb = Array.from({ length: n }, () => new Set());
+  for (let t = 0; t < T.length; t += 3) {
+    const a = T[t], b = T[t + 1], c = T[t + 2];
+    nb[a].add(b); nb[a].add(c); nb[b].add(a); nb[b].add(c); nb[c].add(a); nb[c].add(b);
+  }
+  const ring = nb.map(s => [...s]);
+  for (let it = 0; it < 40; it++) {
+    const Q = P.slice();
+    for (let i = 0; i < n; i++) {
+      let ax = 0, ay = 0, az = 0;
+      for (const j of ring[i]) { ax += Q[3 * j]; ay += Q[3 * j + 1]; az += Q[3 * j + 2]; }
+      const m = ring[i].length;
+      let x = lerp(Q[3 * i], ax / m, 0.5), y = lerp(Q[3 * i + 1], ay / m, 0.5), z = lerp(Q[3 * i + 2], az / m, 0.5);
+      const s = shapeScale(x, y, z);
+      P[3 * i] = x * s; P[3 * i + 1] = y * s; P[3 * i + 2] = z * s;
+    }
+  }
+  orient();
+  let mx = 0, my = 0, mz = 0;
+  for (let i = 0; i < n; i++) { mx += P[3 * i]; my += P[3 * i + 1]; mz += P[3 * i + 2]; }
+  mx /= n; my /= n; mz /= n;
+
+  // --- interior core: a sparse lattice of particles that gives the butter a body ---
+  const core = [];
+  for (let i = 0; i < 5; i++) for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++)
+    core.push((i / 2 - 1) * 0.65 * HALF[0], (j - 1) * 0.45 * HALF[1], (k - 1) * 0.5 * HALF[2]);
+  const ns = n, nc = core.length / 3, nTot = ns + nc;
+  butter.n = nTot; butter.ns = ns;
+  butter.restX = new Float64Array(nTot); butter.restY = new Float64Array(nTot); butter.restZ = new Float64Array(nTot);
+  for (let i = 0; i < ns; i++) { butter.restX[i] = P[3 * i] - mx; butter.restY[i] = P[3 * i + 1] - my; butter.restZ[i] = P[3 * i + 2] - mz; }
+  for (let c = 0; c < nc; c++) { butter.restX[ns + c] = core[3 * c]; butter.restY[ns + c] = core[3 * c + 1]; butter.restZ[ns + c] = core[3 * c + 2]; }
+  butter.plX = Float64Array.from(butter.restX); butter.plY = Float64Array.from(butter.restY); butter.plZ = Float64Array.from(butter.restZ);
+  butter.nt = T.length / 3;
+  butter.tris = new Int32Array(T);
+
+  // --- edges (+ the two opposite vertices → bending springs) ---
+  const edgeMap = new Map(), E = [], opp = [];
+  const key = (a, b) => (a < b ? a * n + b : b * n + a);
+  for (let t = 0; t < T.length; t += 3) {
+    for (let e = 0; e < 3; e++) {
+      const a = T[t + e], b = T[t + (e + 1) % 3], o = T[t + (e + 2) % 3], k0 = key(a, b);
+      let k = edgeMap.get(k0);
+      if (k === undefined) { k = E.length / 2; edgeMap.set(k0, k); E.push(Math.min(a, b), Math.max(a, b)); opp.push(o, -1); }
+      else opp[2 * k + 1] = o;
+    }
+  }
+  const nEdge = E.length / 2, bend = [];
+  for (let k = 0; k < nEdge; k++) if (opp[2 * k] >= 0 && opp[2 * k + 1] >= 0) bend.push(opp[2 * k], opp[2 * k + 1]);
+  // spokes: every surface particle hangs on its two nearest core particles
+  const RX0 = butter.restX, RY0 = butter.restY, RZ0 = butter.restZ, spokes = [], coreE = [];
+  for (let i = 0; i < ns; i++) {
+    const d = [];
+    for (let c = ns; c < nTot; c++) d.push([(RX0[i] - RX0[c]) ** 2 + (RY0[i] - RY0[c]) ** 2 + (RZ0[i] - RZ0[c]) ** 2, c]);
+    d.sort((a, b) => a[0] - b[0]);
+    spokes.push(i, d[0][1], i, d[1][1]);
+  }
+  for (let a = ns; a < nTot; a++) for (let b = a + 1; b < nTot; b++) {
+    const d = Math.hypot(RX0[a] - RX0[b], RY0[a] - RY0[b], RZ0[a] - RZ0[b]);
+    if (d < 95) coreE.push(a, b);
+  }
+  // edge order: surface edges | spokes | core lattice | (optional) bending springs
+  butter.nEdge = nEdge;
+  butter.nSolid = nEdge + (spokes.length + coreE.length) / 2;
+  butter.ne = butter.nSolid + bend.length / 2;
+  butter.edges = new Int32Array(E.concat(spokes, coreE, bend));
+  butter.edgeKind = new Uint8Array(butter.ne);
+  for (let k = nEdge; k < butter.ne; k++) butter.edgeKind[k] = k < nEdge + spokes.length / 2 ? 2 : k < butter.nSolid ? 3 : 1;
+  butter.edgeRest = new Float64Array(butter.ne);
+  updateEdgeRest(butter.restX, butter.restY, butter.restZ);
+
+  // --- rest volume, rest triangle normals, rest extents ---
+  const qx = butter.restX, qy = butter.restY, qz = butter.restZ;
+  let V = 0;
+  butter.restN = new Float64Array(3 * butter.nt);
+  for (let t = 0; t < butter.nt; t++) {
+    const a = T[3 * t], b = T[3 * t + 1], c = T[3 * t + 2];
+    V += qx[a] * (qy[b] * qz[c] - qz[b] * qy[c]) + qy[a] * (qz[b] * qx[c] - qx[b] * qz[c]) + qz[a] * (qx[b] * qy[c] - qy[b] * qx[c]);
+    const ux = qx[b] - qx[a], uy = qy[b] - qy[a], uz = qz[b] - qz[a], vx = qx[c] - qx[a], vy = qy[c] - qy[a], vz = qz[c] - qz[a];
+    butter.restN[3 * t] = uy * vz - uz * vy; butter.restN[3 * t + 1] = uz * vx - ux * vz; butter.restN[3 * t + 2] = ux * vy - uy * vx;
+  }
+  butter.vol0 = V / 6;
+  const ext = [0, 0, 0];
+  for (let i = 0; i < ns; i++) { ext[0] = Math.max(ext[0], Math.abs(qx[i])); ext[1] = Math.max(ext[1], Math.abs(qy[i])); ext[2] = Math.max(ext[2], Math.abs(qz[i])); }
+  butter.restExt = ext;
+
+  // --- Loop subdivision topology (drawing only) ---
+  const ringStart = new Int32Array(n + 1), ringIdx = [], beta = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    ringStart[i] = ringIdx.length;
+    for (const j of ring[i]) ringIdx.push(j);
+    const m = ring[i].length, c = 3 / 8 + Math.cos(TAU / m) / 4;
+    beta[i] = (5 / 8 - c * c) / m;
+  }
+  ringStart[n] = ringIdx.length;
+  butter.ringStart = ringStart; butter.ringIdx = new Int32Array(ringIdx);
+  butter.nrmX = new Float64Array(n); butter.nrmY = new Float64Array(n); butter.nrmZ = new Float64Array(n);
+  butter.curveH = new Float64Array(n);
+  const subT = [];
+  for (let t = 0; t < T.length; t += 3) {
+    const a = T[t], b = T[t + 1], c = T[t + 2];
+    const ab = n + edgeMap.get(key(a, b)), bc = n + edgeMap.get(key(b, c)), ca = n + edgeMap.get(key(c, a));
+    subT.push(a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca);
+  }
+  butter.sub = {
+    nv: n + nEdge, ringStart, ringIdx: new Int32Array(ringIdx), beta,
+    edgeA: new Int32Array(nEdge), edgeB: new Int32Array(nEdge), edgeC: new Int32Array(nEdge), edgeD: new Int32Array(nEdge),
+    tris: new Uint16Array(subT),
+  };
+  for (let k = 0; k < nEdge; k++) {
+    butter.sub.edgeA[k] = E[2 * k]; butter.sub.edgeB[k] = E[2 * k + 1];
+    butter.sub.edgeC[k] = opp[2 * k]; butter.sub.edgeD[k] = opp[2 * k + 1];
+  }
+
+  const N = nTot;
+  BX = new Float64Array(N); BY = new Float64Array(N); BZ = new Float64Array(N);
+  BPX = new Float64Array(N); BPY = new Float64Array(N); BPZ = new Float64Array(N);
+  BVX = new Float64Array(N); BVY = new Float64Array(N); BVZ = new Float64Array(N);
+  BW = new Float64Array(N); BSX = new Float64Array(N); BSY = new Float64Array(N); BSZ = new Float64Array(N);
+  butter.gradX = new Float64Array(ns); butter.gradY = new Float64Array(ns); butter.gradZ = new Float64Array(ns);
+  butter.stick = new Float64Array(N); butter.onFloor = new Uint8Array(N);
+}
+
+function updateEdgeRest(qx, qy, qz) {
+  const E = butter.edges, R = butter.edgeRest, ne = tune.bend > 0 ? butter.ne : butter.nSolid;
+  for (let k = 0; k < ne; k++) {
+    const i = E[2 * k], j = E[2 * k + 1];
+    R[k] = Math.hypot(qx[i] - qx[j], qy[i] - qy[j], qz[i] - qz[j]);
+  }
+}
+
+function placeButter(cx, cy, cz) {
+  const n = butter.n;
+  for (let i = 0; i < n; i++) {
+    BX[i] = BPX[i] = BSX[i] = cx + butter.restX[i];
+    BY[i] = BPY[i] = BSY[i] = cy + butter.restY[i];
+    BZ[i] = BPZ[i] = BSZ[i] = cz + butter.restZ[i];
+    BVX[i] = BVY[i] = BVZ[i] = 0;
+    butter.stick[i] = 0; butter.onFloor[i] = 0;
+  }
+  butter.plX.set(butter.restX); butter.plY.set(butter.restY); butter.plZ.set(butter.restZ);
+  updateEdgeRest(butter.plX, butter.plY, butter.plZ);
+  updateCurveRest(butter.plX, butter.plY, butter.plZ);
+  butter.cx = cx; butter.cy = cy; butter.cz = cz; butter.q = [0, 0, 0, 1]; quatToMat3(butter.q, butter.R);
+  butter.vcx = butter.vcy = butter.vcz = 0; butter.squash = 0;
+  butter.flipped = 0; butter.tangleTime = 0; butter.smBoost = 0; butter.rescue = false;
+}
+
+// Base material constants (scaled by the sliders in deriveParams).
+const tune = {
+  edge: 4e-3,        // surface edge compliance
+  bend: 0,           // optional bending springs relative to edges (0 = off; the curvature memory does this job)
+  spoke: 0.07,       // compliance of the spokes from the surface to the core (resists deep dents)
+  core: 0.06,        // compliance of the core lattice (a soft gel)
+  smBase: 0.35,      // shape-memory frequency (Hz) at elasticity 0 …
+  smElastic: 1.6,    // … plus this much at elasticity 1
+  floorMuS: 0.95,    // butter ↔ floor static friction
+  floorMuK: 0.65,    // butter ↔ floor kinetic friction
+  stick: 1,          // floor stickiness multiplier
+  plastic: 1,        // plasticity (creep) multiplier
+  roll: 3.5,         // rolling resistance while lying on the floor (1/s)
+  damp: 0.7,         // internal damping at damping slider 0 (1/s) …
+  dampRange: 25,     // … multiplied by up to this at slider 1
+  tau: 0.004,        // viscous (strain-rate) damping time at damping slider 0.5 (s)
+  sink: 12,          // objects resting on the butter follow its local surface at this rate (1/s)
+  drawOffset: 10,    // the drawn surface sits this far outside the particle centres (= PR)
+  curve: 0.12,       // surface curvature memory (per substep): smooth surface, no wrinkles
+};
+
+// Slider values → solver parameters.
+function deriveParams() {
+  if (butter.massSet !== params.mass) {
+    BW.fill(butter.n / params.mass);
+    butter.massSet = params.mass;
+  }
+  const soft = Math.pow(4, (params.softness - 0.5) * 2);    // 0.25× … 4× compliance
+  const massK = Math.sqrt(params.mass / 3);                   // heavier butter: a bit stiffer, but slower & saggier
+  const E = params.elasticity;
+  butter.aEdge = tune.edge * soft / massK;
+  butter.aBend = butter.aEdge * tune.bend;
+  butter.aSpoke = tune.spoke * soft;
+  butter.aCore = tune.core * soft;
+  const f = (tune.smBase + tune.smElastic * E) / Math.pow(soft, 0.4);   // shape-memory frequency (Hz)
+  const om = TAU * f * (STEP_DT / SUBSTEPS);
+  butter.smK = Math.min(0.02, om * om);
+  butter.creep = (0.08 + 1.6 * (1 - E) * (1 - E)) * tune.plastic;      // how fast sustained deformation "sets"
+  butter.recover = 0.2 + 0.85 * E;                                      // how fast the original shape returns
+  butter.dampK = tune.damp * Math.pow(tune.dampRange, params.damping);  // internal (jiggle) damping, 1/s
+  butter.tau = tune.tau * Math.pow(4, (params.damping - 0.5) * 2);      // viscous damping (works under heavy loads)
+}
+
+// Rotation part of a 3×3 matrix (Müller et al. 2016), warm-started from q.
+const tmpM3 = new Float64Array(9), tmpQ = [0, 0, 0, 1];
+function extractRotation(A, q, iters) {
+  for (let it = 0; it < iters; it++) {
+    quatToMat3(q, tmpM3);
+    const m = tmpM3;
+    let ox = 0, oy = 0, oz = 0, dot = 0;
+    for (let k = 0; k < 3; k++) {
+      const rx = m[k], ry = m[3 + k], rz = m[6 + k], ax = A[k], ay = A[3 + k], az = A[6 + k];
+      ox += ry * az - rz * ay; oy += rz * ax - rx * az; oz += rx * ay - ry * ax;
+      dot += rx * ax + ry * ay + rz * az;
+    }
+    const s = 1 / (Math.abs(dot) + 1e-9);
+    ox *= s; oy *= s; oz *= s;
+    const w = Math.sqrt(ox * ox + oy * oy + oz * oz);
+    if (w < 1e-9) break;
+    const sn = Math.sin(0.5 * w) / w;
+    tmpQ[0] = ox * sn; tmpQ[1] = oy * sn; tmpQ[2] = oz * sn; tmpQ[3] = Math.cos(0.5 * w);
+    quatMul(tmpQ, q, q);
+    quatNormalize(q);
+  }
+}
+
+// Global shape matching toward the plastic rest shape (also tracks centre + rotation).
+const Apq = new Float64Array(9);
+function butterShapeMatch() {
+  const n = butter.n, plX = butter.plX, plY = butter.plY, plZ = butter.plZ;
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < n; i++) { cx += BX[i]; cy += BY[i]; cz += BZ[i]; }
+  cx /= n; cy /= n; cz /= n;
+  Apq.fill(0);
+  for (let i = 0; i < n; i++) {
+    const dx = BX[i] - cx, dy = BY[i] - cy, dz = BZ[i] - cz, qx = plX[i], qy = plY[i], qz = plZ[i];
+    Apq[0] += dx * qx; Apq[1] += dx * qy; Apq[2] += dx * qz;
+    Apq[3] += dy * qx; Apq[4] += dy * qy; Apq[5] += dy * qz;
+    Apq[6] += dz * qx; Apq[7] += dz * qy; Apq[8] += dz * qz;
+  }
+  extractRotation(Apq, butter.q, 2);
+  const R = butter.R;
+  quatToMat3(butter.q, R);
+  butter.cx = cx; butter.cy = cy; butter.cz = cz;
+  const k = Math.max(butter.smK, butter.smBoost);
+  for (let i = 0; i < n; i++) {
+    const qx = plX[i], qy = plY[i], qz = plZ[i];
+    BX[i] += (cx + R[0] * qx + R[1] * qy + R[2] * qz - BX[i]) * k;
+    BY[i] += (cy + R[3] * qx + R[4] * qy + R[5] * qz - BY[i]) * k;
+    BZ[i] += (cz + R[6] * qx + R[7] * qy + R[8] * qz - BZ[i]) * k;
+  }
+}
+
+// Edge + bending distance constraints: smooth strain limiting, XPBD viscous damping.
+function butterEdges(h) {
+  const E = butter.edges, Rl = butter.edgeRest, K = butter.edgeKind, ih2 = 1 / (h * h);
+  const ne = tune.bend > 0 && !butter.rescue ? butter.ne : butter.nSolid;   // bending springs are optional
+  const alphas = [butter.aEdge * ih2, butter.aBend * ih2, butter.aSpoke * ih2, butter.aCore * ih2];
+  const gamma = butter.tau / h, rescue = butter.rescue;
+  for (let k = 0; k < ne; k++) {
+    const i = E[2 * k], j = E[2 * k + 1];
+    const dx = BX[i] - BX[j], dy = BY[i] - BY[j], dz = BZ[i] - BZ[j];
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (d < 1e-7) continue;
+    const L = Rl[k], ratio = d / L;
+    let a = alphas[K[k]];
+    if (!rescue) {
+      const ex = ratio > 1.8 ? ratio - 1.8 : ratio < 0.55 ? 2 * (0.55 - ratio) : 0;
+      if (ex > 0) a /= 1 + 120 * ex * ex;
+    }
+    const wi = BW[i], wj = BW[j];
+    const rate = (dx * (BX[i] - BPX[i] - BX[j] + BPX[j]) + dy * (BY[i] - BPY[i] - BY[j] + BPY[j]) +
+      dz * (BZ[i] - BPZ[i] - BZ[j] + BPZ[j])) / d;
+    const s = (L - d - gamma * rate) / (((1 + gamma) * (wi + wj) + a) * d);
+    const cx = dx * s, cy = dy * s, cz = dz * s;
+    BX[i] += wi * cx; BY[i] += wi * cy; BZ[i] += wi * cz;
+    BX[j] -= wj * cx; BY[j] -= wj * cy; BZ[j] -= wj * cz;
+  }
+}
+
+// Area-weighted vertex normals of a particle configuration → butter.nrmX/Y/Z (unit length).
+function vertexNormals(X, Y, Z) {
+  const T = butter.tris, nx = butter.nrmX, ny = butter.nrmY, nz = butter.nrmZ;
+  nx.fill(0); ny.fill(0); nz.fill(0);
+  for (let t = 0; t < T.length; t += 3) {
+    const a = T[t], b = T[t + 1], c = T[t + 2];
+    const ux = X[b] - X[a], uy = Y[b] - Y[a], uz = Z[b] - Z[a], vx = X[c] - X[a], vy = Y[c] - Y[a], vz = Z[c] - Z[a];
+    const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+    nx[a] += fx; ny[a] += fy; nz[a] += fz; nx[b] += fx; ny[b] += fy; nz[b] += fz; nx[c] += fx; ny[c] += fy; nz[c] += fz;
+  }
+  for (let i = 0; i < butter.ns; i++) {
+    const l = Math.sqrt(nx[i] * nx[i] + ny[i] * ny[i] + nz[i] * nz[i]) || 1;
+    nx[i] /= l; ny[i] /= l; nz[i] /= l;
+  }
+}
+// Rest "height" of every particle above the average of its neighbours (along its normal).
+function updateCurveRest(qx, qy, qz) {
+  vertexNormals(qx, qy, qz);
+  const rs = butter.ringStart, ri = butter.ringIdx, H = butter.curveH;
+  for (let i = 0; i < butter.ns; i++) {
+    let ax = 0, ay = 0, az = 0;
+    for (let k = rs[i]; k < rs[i + 1]; k++) { const j = ri[k]; ax += qx[j]; ay += qy[j]; az += qz[j]; }
+    const m = rs[i + 1] - rs[i];
+    H[i] = (qx[i] - ax / m) * butter.nrmX[i] + (qy[i] - ay / m) * butter.nrmY[i] + (qz[i] - az / m) * butter.nrmZ[i];
+  }
+}
+// Surface curvature memory: each particle is pulled toward its rest height above the
+// average of its neighbours, measured along the current normal. Rotation invariant and
+// orientation aware, so it irons out wrinkles and pushes folds back out.
+function butterCurvature() {
+  if (butter.rescue) return;
+  const rs = butter.ringStart, ri = butter.ringIdx, H = butter.curveH, k = tune.curve;
+  const nx = butter.nrmX, ny = butter.nrmY, nz = butter.nrmZ;
+  for (let i = 0; i < butter.ns; i++) {
+    const s0 = rs[i], s1 = rs[i + 1], m = s1 - s0;
+    let ax = 0, ay = 0, az = 0;
+    for (let q = s0; q < s1; q++) { const j = ri[q]; ax += BX[j]; ay += BY[j]; az += BZ[j]; }
+    ax /= m; ay /= m; az /= m;
+    const dx = (ax + nx[i] * H[i] - BX[i]) * k, dy = (ay + ny[i] * H[i] - BY[i]) * k, dz = (az + nz[i] * H[i] - BZ[i]) * k;
+    const own = m / (m + 1), oth = 1 / (m + 1);
+    BX[i] += dx * own; BY[i] += dy * own; BZ[i] += dz * own;
+    for (let q = s0; q < s1; q++) { const j = ri[q]; BX[j] -= dx * oth; BY[j] -= dy * oth; BZ[j] -= dz * oth; }
+  }
+}
+
+// Global volume constraint → internal pressure (the butter bulges when squashed).
+function butterVolume() {
+  const n = butter.ns, T = butter.tris, nt = butter.nt, gx = butter.gradX, gy = butter.gradY, gz = butter.gradZ;
+  const cx = butter.cx, cy = butter.cy, cz = butter.cz;
+  gx.fill(0); gy.fill(0); gz.fill(0);
+  let V = 0;
+  for (let t = 0; t < nt; t++) {
+    const a = T[3 * t], b = T[3 * t + 1], c = T[3 * t + 2];
+    const ax = BX[a] - cx, ay = BY[a] - cy, az = BZ[a] - cz;
+    const bx = BX[b] - cx, by = BY[b] - cy, bz = BZ[b] - cz;
+    const ex = BX[c] - cx, ey = BY[c] - cy, ez = BZ[c] - cz;
+    const c1x = by * ez - bz * ey, c1y = bz * ex - bx * ez, c1z = bx * ey - by * ex;   // b × c
+    V += ax * c1x + ay * c1y + az * c1z;
+    gx[a] += c1x; gy[a] += c1y; gz[a] += c1z;
+    gx[b] += ey * az - ez * ay; gy[b] += ez * ax - ex * az; gz[b] += ex * ay - ey * ax;   // c × a
+    gx[c] += ay * bz - az * by; gy[c] += az * bx - ax * bz; gz[c] += ax * by - ay * bx;   // a × b
+  }
+  const C = V / 6 - butter.vol0;
+  let den = 0, gmax = 0;
+  for (let i = 0; i < n; i++) {
+    const g2 = (gx[i] * gx[i] + gy[i] * gy[i] + gz[i] * gz[i]) / 36;
+    den += BW[i] * g2;
+    if (g2 > gmax) gmax = g2;
+  }
+  if (den < 1e-12) return;
+  let dl = -C / den;
+  const lim = 1.5 / (BW[0] * Math.sqrt(gmax) + 1e-9);     // max 1.5 units of movement per substep
+  if (dl > lim) dl = lim; else if (dl < -lim) dl = -lim;
+  const f = dl / 6;
+  for (let i = 0; i < n; i++) { const w = BW[i] * f; BX[i] += w * gx[i]; BY[i] += w * gy[i]; BZ[i] += w * gz[i]; }
+}
+
+function inv3(m, o) {
+  const a = m[0], b = m[1], c = m[2], d = m[3], e = m[4], f = m[5], g = m[6], h = m[7], i = m[8];
+  const A = e * i - f * h, B = f * g - d * i, C = d * h - e * g, det = a * A + b * B + c * C;
+  if (Math.abs(det) < 1e-12) { o.fill(0); return; }
+  const s = 1 / det;
+  o[0] = A * s; o[1] = (c * h - b * i) * s; o[2] = (b * f - c * e) * s;
+  o[3] = B * s; o[4] = (a * i - c * g) * s; o[5] = (c * d - a * f) * s;
+  o[6] = C * s; o[7] = (b * g - a * h) * s; o[8] = (a * e - b * d) * s;
+}
+
+// Internal damping: damp velocities relative to the rigid motion (keeps throws intact).
+const inertiaM = new Float64Array(9), inertiaInv = new Float64Array(9);
+function dampButter(dt) {
+  const n = butter.n;
+  let cx = 0, cy = 0, cz = 0, vx = 0, vy = 0, vz = 0;
+  for (let i = 0; i < n; i++) { cx += BX[i]; cy += BY[i]; cz += BZ[i]; vx += BVX[i]; vy += BVY[i]; vz += BVZ[i]; }
+  cx /= n; cy /= n; cz /= n; vx /= n; vy /= n; vz /= n;
+  let Lx = 0, Ly = 0, Lz = 0, xx = 0, yy = 0, zz = 0, xy = 0, xz = 0, yz = 0;
+  for (let i = 0; i < n; i++) {
+    const rx = BX[i] - cx, ry = BY[i] - cy, rz = BZ[i] - cz;
+    const ux = BVX[i] - vx, uy = BVY[i] - vy, uz = BVZ[i] - vz;
+    Lx += ry * uz - rz * uy; Ly += rz * ux - rx * uz; Lz += rx * uy - ry * ux;
+    xx += rx * rx; yy += ry * ry; zz += rz * rz; xy += rx * ry; xz += rx * rz; yz += ry * rz;
+  }
+  const I = inertiaM;
+  I[0] = yy + zz; I[1] = -xy; I[2] = -xz; I[3] = -xy; I[4] = xx + zz; I[5] = -yz; I[6] = -xz; I[7] = -yz; I[8] = xx + yy;
+  inv3(I, inertiaInv);
+  const J = inertiaInv;
+  const ox = J[0] * Lx + J[1] * Ly + J[2] * Lz, oy = J[3] * Lx + J[4] * Ly + J[5] * Lz, oz = J[6] * Lx + J[7] * Ly + J[8] * Lz;
+  // settle rocking/rolling while lying on a broad contact patch
+  let contacts = 0;
+  for (let i = 0; i < n; i++) contacts += butter.onFloor[i];
+  const rk = contacts >= 12 ? Math.exp(-tune.roll * Math.min(1, (contacts - 11) / 25) * dt) : 1;
+  const k = Math.exp(-butter.dampK * dt), air = Math.exp(-(params.gravityOn ? 0.03 : 0.8) * dt);
+  for (let i = 0; i < n; i++) {
+    const rx = BX[i] - cx, ry = BY[i] - cy, rz = BZ[i] - cz;
+    const ax = oy * rz - oz * ry, ay = oz * rx - ox * rz, az = ox * ry - oy * rx;   // ω × r
+    BVX[i] = (vx + ax * rk + (BVX[i] - vx - ax) * k) * air;
+    BVY[i] = (vy + ay * rk + (BVY[i] - vy - ay) * k) * air;
+    BVZ[i] = (vz + az * rk + (BVZ[i] - vz - az) * k) * air;
+  }
+  butter.vcx = vx; butter.vcy = vy; butter.vcz = vz;
+  butter.wx = ox * rk; butter.wy = oy * rk; butter.wz = oz * rk;
+}
+
+// Plasticity: rest shape creeps toward the current (de-rotated) shape and recovers.
+function updatePlasticity(dt) {
+  const n = butter.n, plX = butter.plX, plY = butter.plY, plZ = butter.plZ, qx = butter.restX, qy = butter.restY, qz = butter.restZ;
+  const cx = butter.cx, cy = butter.cy, cz = butter.cz, R = butter.R;
+  const kc = 1 - Math.exp(-butter.creep * dt), kr = 1 - Math.exp(-butter.recover * dt);
+  let mx = 0, my = 0, mz = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = BX[i] - cx, dy = BY[i] - cy, dz = BZ[i] - cz;
+    const lx = R[0] * dx + R[3] * dy + R[6] * dz, ly = R[1] * dx + R[4] * dy + R[7] * dz, lz = R[2] * dx + R[5] * dy + R[8] * dz;
+    let px = plX[i] + (lx - plX[i]) * kc, py = plY[i] + (ly - plY[i]) * kc, pz = plZ[i] + (lz - plZ[i]) * kc;
+    px += (qx[i] - px) * kr; py += (qy[i] - py) * kr; pz += (qz[i] - pz) * kr;
+    const ox = px - qx[i], oy = py - qy[i], oz = pz - qz[i], o = Math.sqrt(ox * ox + oy * oy + oz * oz);
+    if (o > MAX_PLASTIC) { const s = MAX_PLASTIC / o; px = qx[i] + ox * s; py = qy[i] + oy * s; pz = qz[i] + oz * s; }
+    plX[i] = px; plY[i] = py; plZ[i] = pz; mx += px; my += py; mz += pz;
+  }
+  mx /= n; my /= n; mz /= n;
+  for (let i = 0; i < n; i++) { plX[i] -= mx; plY[i] -= my; plZ[i] -= mz; }
+  updateEdgeRest(plX, plY, plZ);
+  updateCurveRest(plX, plY, plZ);
+}
+
+// How flattened the butter is (1 - smallest extent ratio in its own frame).
+function measureSquash() {
+  const n = butter.ns, R = butter.R, cx = butter.cx, cy = butter.cy, cz = butter.cz;
+  let ax = 0, ay = 0, az = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = BX[i] - cx, dy = BY[i] - cy, dz = BZ[i] - cz;
+    ax = Math.max(ax, Math.abs(R[0] * dx + R[3] * dy + R[6] * dz));
+    ay = Math.max(ay, Math.abs(R[1] * dx + R[4] * dy + R[7] * dz));
+    az = Math.max(az, Math.abs(R[2] * dx + R[5] * dy + R[8] * dz));
+  }
+  const e = butter.restExt;
+  butter.squash = clamp(1 - Math.min(ax / e[0], ay / e[1], az / e[2]), 0, 1);
+}
+
+// Folded surface detection: triangles whose normal points against their rest orientation.
+function countFlipped() {
+  const T = butter.tris, rn = butter.restN, R = butter.R;
+  let c = 0;
+  for (let t = 0; t < butter.nt; t++) {
+    const a = T[3 * t], b = T[3 * t + 1], d = T[3 * t + 2];
+    const ux = BX[b] - BX[a], uy = BY[b] - BY[a], uz = BZ[b] - BZ[a], vx = BX[d] - BX[a], vy = BY[d] - BY[a], vz = BZ[d] - BZ[a];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const rx = rn[3 * t], ry = rn[3 * t + 1], rz = rn[3 * t + 2];
+    const wx = R[0] * rx + R[1] * ry + R[2] * rz, wy = R[3] * rx + R[4] * ry + R[5] * rz, wz = R[6] * rx + R[7] * ry + R[8] * rz;
+    const dot = nx * wx + ny * wy + nz * wz;
+    if (dot < -0.3 * Math.sqrt((nx * nx + ny * ny + nz * nz) * (wx * wx + wy * wy + wz * wz))) c++;
+  }
+  return c;
+}
+
+/* =========================================================================
+   3. COLLISION HANDLING
+   Butter particles ↔ arena (with floor friction and stickiness), rigid ↔
+   arena, rigid ↔ rigid (spheres, boxes, compounds), rigid ↔ butter shell,
+   and a rescue for objects that end up inside the butter.
+   ========================================================================= */
+
+const bb = { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };   // butter AABB (particle centres)
+
+function butterBounds() {
+  let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (let i = 0; i < butter.ns; i++) {
+    const x = BX[i], y = BY[i], z = BZ[i];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+  }
+  bb.minX = minX; bb.minY = minY; bb.minZ = minZ; bb.maxX = maxX; bb.maxY = maxY; bb.maxZ = maxZ;
+}
+
+// Butter particles vs floor, walls and ceiling. Floor friction, plus stickiness:
+// when the butter is strongly flattened or pressed, its bottom grips the floor.
+function collideButterWorld(h) {
+  const n = butter.n, F = PR, XW = ARENA.x - PR, ZW = ARENA.z - PR, TOP = ARENA.top - PR;
+  const muS = tune.floorMuS, muK = tune.floorMuK, ih2 = 1 / (h * h);
+  const sq = butter.squash, gain = sq > STICK_SQUASH ? (sq - STICK_SQUASH) * 16 * tune.stick : 0;
+  const loadScale = ih2 / 2000 / STICK_LOAD;
+  const breakForce = STICK_STRENGTH * 2000 / BW[0];       // per particle, scales with butter mass
+  const stickAlpha = STICK_RANGE / breakForce;
+  const stick = butter.stick, onFloor = butter.onFloor;
+  for (let i = 0; i < n; i++) {
+    if (BY[i] < F) {
+      const d = F - BY[i];
+      BY[i] = F;
+      const dx = BX[i] - BPX[i], dz = BZ[i] - BPZ[i], ad = Math.sqrt(dx * dx + dz * dz);
+      if (ad < muS * d) { BX[i] = BPX[i]; BZ[i] = BPZ[i]; }
+      else { const f = Math.min(muK * d / ad, 1); BX[i] -= dx * f; BZ[i] -= dz * f; }
+      onFloor[i] = 1;
+      const load = d * loadScale;                       // > 1 when this spot is pressed hard into the floor
+      const g = Math.max(gain, load > 1 ? Math.min(6, (load - 1) * 6) * tune.stick : 0);
+      if (g > 0) stick[i] = Math.min(1, stick[i] + g * h);
+    } else {
+      onFloor[i] = BY[i] < F + 1.5 ? 1 : 0;
+      const st = stick[i];
+      if (st > 0) {
+        const gap = BY[i] - F;
+        if (gap > STICK_RANGE) stick[i] = 0;
+        else {
+          const dl = gap / (BW[i] + stickAlpha / st * ih2);
+          if (dl * ih2 > breakForce * st) stick[i] = 0;    // pulled hard enough → it pops free
+          else BY[i] -= BW[i] * dl;
+        }
+      }
+    }
+    if (stick[i] > 0) stick[i] = Math.max(0, stick[i] - STICK_DECAY * h);
+    // walls (friction acts on the in-plane motion)
+    if (BX[i] < -XW || BX[i] > XW) {
+      const lim = BX[i] < 0 ? -XW : XW, d = Math.abs(BX[i] - lim);
+      BX[i] = lim;
+      const dy = BY[i] - BPY[i], dz = BZ[i] - BPZ[i], ad = Math.sqrt(dy * dy + dz * dz);
+      if (ad < muS * d) { BY[i] = BPY[i]; BZ[i] = BPZ[i]; } else { const f = Math.min(muK * d / ad, 1); BY[i] -= dy * f; BZ[i] -= dz * f; }
+    }
+    if (BZ[i] < -ZW || BZ[i] > ZW) {
+      const lim = BZ[i] < 0 ? -ZW : ZW, d = Math.abs(BZ[i] - lim);
+      BZ[i] = lim;
+      const dx = BX[i] - BPX[i], dy = BY[i] - BPY[i], ad = Math.sqrt(dx * dx + dy * dy);
+      if (ad < muS * d) { BX[i] = BPX[i]; BY[i] = BPY[i]; } else { const f = Math.min(muK * d / ad, 1); BX[i] -= dx * f; BY[i] -= dy * f; }
+    }
+    if (BY[i] > TOP) BY[i] = TOP;
+  }
+}
+
+// Arena planes as (normal, offset): inside means n·p + d ≥ 0.
+const PLANES = [[0, 1, 0, 0], [0, -1, 0, ARENA.top], [1, 0, 0, ARENA.x], [-1, 0, 0, ARENA.x], [0, 0, 1, ARENA.z], [0, 0, -1, ARENA.z]];
+
+// A sphere part against the arena planes.
+function sphereVsWorld(b, p) {
+  for (let k = 0; k < 6; k++) {
+    const P = PLANES[k], d = p.r - (P[0] * p.wx + P[1] * p.wy + P[2] * p.wz + P[3]);
+    if (d <= 0) continue;
+    setStatic(SA); setBody(SB, b, p.wx - P[0] * p.r, p.wy - P[1] * p.r, p.wz - P[2] * p.r);
+    resolveContact(P[0], P[1], P[2], d, b.mu, b.mu * 0.8, b.e);
+    if (k === 0) b.floorContact = true;
+    b.updateWorld();
+  }
+}
+// A box part against the arena planes: the corners within a whisker of the deepest one
+// are averaged into a single contact, so a box landing flat lands flat (no spurious spin).
+function boxVsWorld(b, p) {
+  for (let k = 0; k < 6; k++) {
+    boxSamples(b, p);
+    const P = PLANES[k], ws = p.ws;
+    let maxD = 0;
+    for (let c = 0; c < 24; c += 3) maxD = Math.max(maxD, -(P[0] * ws[c] + P[1] * ws[c + 1] + P[2] * ws[c + 2] + P[3]));
+    if (maxD <= 0) continue;
+    let ax = 0, ay = 0, az = 0, m = 0;
+    for (let c = 0; c < 24; c += 3) {
+      const d = -(P[0] * ws[c] + P[1] * ws[c + 1] + P[2] * ws[c + 2] + P[3]);
+      if (d > maxD - 1.5) { ax += ws[c]; ay += ws[c + 1]; az += ws[c + 2]; m++; }
+    }
+    setStatic(SA); setBody(SB, b, ax / m, ay / m, az / m);
+    resolveContact(P[0], P[1], P[2], maxD, b.mu, b.mu * 0.8, b.e);
+    if (k === 0) b.floorContact = true;
+    b.updateWorld();
+  }
+}
+
+function collideBodyWorld(b) {
+  b.updateWorld();
+  for (const p of b.parts) {
+    if (p.type === 0) sphereVsWorld(b, p);
+    else boxVsWorld(b, p);
+  }
+}
+
+// Point → box-part local coordinates (relative to the part centre, in the body frame).
+let lX = 0, lY = 0, lZ = 0;
+function toBoxLocal(b, p, x, y, z) {
+  const R = b.R, dx = x - p.wx, dy = y - p.wy, dz = z - p.wz;
+  lX = R[0] * dx + R[3] * dy + R[6] * dz;
+  lY = R[1] * dx + R[4] * dy + R[7] * dz;
+  lZ = R[2] * dx + R[5] * dy + R[8] * dz;
+}
+
+// ---- rigid ↔ rigid ----
+function collideBodies(A, B) {
+  const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, rr = A.radius + B.radius;
+  if (dx * dx + dy * dy + dz * dz > rr * rr) return;
+  const e = (A.e + B.e) * 0.5, mu = Math.sqrt(A.mu * B.mu);
+  A.updateWorld(); B.updateWorld();
+  for (const pa of A.parts) for (const pb of B.parts) {
+    if (pa.type === 0 && pb.type === 0) sphereSphere(A, pa, B, pb, mu, e);
+    else if (pa.type === 0) sphereBox(A, pa, B, pb, mu, e);
+    else if (pb.type === 0) sphereBox(B, pb, A, pa, mu, e);
+    else { boxBox(A, pa, B, pb, mu, e); boxBox(B, pb, A, pa, mu, e); }
+  }
+}
+
+function sphereSphere(A, pa, B, pb, mu, e) {
+  const dx = pb.wx - pa.wx, dy = pb.wy - pa.wy, dz = pb.wz - pa.wz, R = pa.r + pb.r, d2 = dx * dx + dy * dy + dz * dz;
+  if (d2 >= R * R) return;
+  const d = Math.sqrt(d2);
+  const nx = d > 1e-6 ? dx / d : 0, ny = d > 1e-6 ? dy / d : 1, nz = d > 1e-6 ? dz / d : 0, depth = R - d;
+  const s = pa.r - depth / 2, px = pa.wx + nx * s, py = pa.wy + ny * s, pz = pa.wz + nz * s;
+  setBody(SA, A, px, py, pz); setBody(SB, B, px, py, pz);
+  resolveContact(nx, ny, nz, depth, mu, mu * 0.8, e);
+  A.updateWorld(); B.updateWorld();
+}
+
+// sphere part of body S against box part of body Bx
+function sphereBox(S, ps, Bx, pb, mu, e) {
+  toBoxLocal(Bx, pb, ps.wx, ps.wy, ps.wz);
+  const hx = pb.hx, hy = pb.hy, hz = pb.hz, r = ps.r;
+  const cx = clamp(lX, -hx, hx), cy = clamp(lY, -hy, hy), cz = clamp(lZ, -hz, hz);
+  let nlx, nly, nlz, depth, qx = cx, qy = cy, qz = cz;
+  const inside = cx === lX && cy === lY && cz === lZ;
+  if (inside) {                       // centre inside the box: leave through the nearest face
+    const fx = hx - Math.abs(lX), fy = hy - Math.abs(lY), fz = hz - Math.abs(lZ);
+    nlx = 0; nly = 0; nlz = 0;
+    if (fx <= fy && fx <= fz) { nlx = Math.sign(lX) || 1; depth = fx + r; qx = nlx * hx; }
+    else if (fy <= fz) { nly = Math.sign(lY) || 1; depth = fy + r; qy = nly * hy; }
+    else { nlz = Math.sign(lZ) || 1; depth = fz + r; qz = nlz * hz; }
+  } else {
+    const ux = lX - cx, uy = lY - cy, uz = lZ - cz, d = Math.sqrt(ux * ux + uy * uy + uz * uz);
+    if (d >= r) return;
+    nlx = ux / d; nly = uy / d; nlz = uz / d; depth = r - d;
+  }
+  const R = Bx.R;
+  const nx = R[0] * nlx + R[1] * nly + R[2] * nlz, ny = R[3] * nlx + R[4] * nly + R[5] * nlz, nz = R[6] * nlx + R[7] * nly + R[8] * nlz;
+  const px = pb.wx + R[0] * qx + R[1] * qy + R[2] * qz, py = pb.wy + R[3] * qx + R[4] * qy + R[5] * qz, pz = pb.wz + R[6] * qx + R[7] * qy + R[8] * qz;
+  setBody(SA, Bx, px, py, pz); setBody(SB, S, px, py, pz);
+  resolveContact(nx, ny, nz, depth, mu, mu * 0.8, e);
+  S.updateWorld(); Bx.updateWorld();
+}
+
+// Sample points of box pa (body A) inside box pb (body B) are pushed out through B's
+// face of deepest penetration; samples pushing through that same face (and nearly as
+// deep) are averaged into one contact, so flat contacts don't add spin.
+const faceDepth = new Float64Array(6), faceSum = new Float64Array(24);
+function boxBox(A, pa, B, pb, mu, e) {
+  boxSamples(A, pa); boxSamples(B, pb);
+  if (pa.maxX < pb.minX || pa.minX > pb.maxX || pa.maxY < pb.minY || pa.minY > pb.maxY || pa.maxZ < pb.minZ || pa.minZ > pb.maxZ) return;
+  const ws = pa.ws;
+  let best = -1, bestD = 0;
+  faceDepth.fill(0); faceSum.fill(0);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let s = 0; s < ws.length; s += 3) {
+      const x = ws[s], y = ws[s + 1], z = ws[s + 2];
+      if (x < pb.minX || x > pb.maxX || y < pb.minY || y > pb.maxY || z < pb.minZ || z > pb.maxZ) continue;
+      toBoxLocal(B, pb, x, y, z);
+      const fx = pb.hx - Math.abs(lX), fy = pb.hy - Math.abs(lY), fz = pb.hz - Math.abs(lZ);
+      if (fx <= 0 || fy <= 0 || fz <= 0) continue;
+      let f, d;
+      if (fx <= fy && fx <= fz) { f = lX > 0 ? 0 : 1; d = fx; } else if (fy <= fz) { f = lY > 0 ? 2 : 3; d = fy; } else { f = lZ > 0 ? 4 : 5; d = fz; }
+      if (pass === 0) { if (d > bestD) { bestD = d; best = f; } }
+      else if (f === best && d > bestD - 1.5) { faceSum[4 * f] += x; faceSum[4 * f + 1] += y; faceSum[4 * f + 2] += z; faceSum[4 * f + 3]++; }
+    }
+    if (best < 0) return;
+  }
+  const m = faceSum[4 * best + 3], x = faceSum[4 * best] / m, y = faceSum[4 * best + 1] / m, z = faceSum[4 * best + 2] / m;
+  const ax = best >> 1, sg = best & 1 ? -1 : 1, R = B.R;
+  const nx = R[ax] * sg, ny = R[3 + ax] * sg, nz = R[6 + ax] * sg;     // B's face normal (a column of R)
+  setBody(SA, B, x, y, z); setBody(SB, A, x, y, z);
+  resolveContact(nx, ny, nz, bestD, mu, mu * 0.8, e);
+  A.updateWorld(); B.updateWorld();
+}
+
+// ---- rigid ↔ butter (particles are spheres of radius PR) ----
+const BUTTER_MU_S = 0.75, BUTTER_MU_K = 0.55;
+
+// Body ↔ butter. Each surface particle is a small sphere (radius PR). The push direction
+// leans on the particle's outward surface normal, so particles get pressed *into* the
+// butter instead of sliding around the object (which would let it slip inside), and a
+// point that has dipped below the surface is pushed straight back out along the normal.
+function shellContact(b, i, qx, qy, qz, gap, muS, muK, e) {
+  // (qx, qy, qz): the body's point closest to particle i; gap: allowed distance (radius + PR)
+  const NX = butter.nrmX, NY = butter.nrmY, NZ = butter.nrmZ;
+  const mx = NX[i], my = NY[i], mz = NZ[i];
+  const ox = qx - BX[i], oy = qy - BY[i], oz = qz - BZ[i];
+  const d2 = ox * ox + oy * oy + oz * oz;
+  if (d2 >= gap * gap) return false;
+  const along = ox * mx + oy * my + oz * mz;
+  let nx, ny, nz, depth;
+  if (along < 0) {                         // behind the particle's tangent plane → straight back out
+    nx = -mx; ny = -my; nz = -mz; depth = gap - along;
+  } else {
+    const d = Math.sqrt(d2) || 1e-6;
+    nx = -ox / d - mx; ny = -oy / d - my; nz = -oz / d - mz;
+    const l = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (l < 1e-6) { nx = -mx; ny = -my; nz = -mz; } else { nx /= l; ny /= l; nz /= l; }
+    depth = gap - d;
+  }
+  setBody(SA, b, qx, qy, qz); setParticle(SB, i);
+  resolveContact(nx, ny, nz, depth, muS, muK, e);
+  // remember the contact patch (local butter velocity and normal) for sinking / bounce shaping
+  b.cc++; b.cnx += nx; b.cny += ny; b.cnz += nz;
+  return true;
+}
+
+function collideBodyButter(b) {
+  const r = b.radius + PR;
+  if (b.x + r < bb.minX || b.x - r > bb.maxX || b.y + r < bb.minY || b.y - r > bb.maxY || b.z + r < bb.minZ || b.z - r > bb.maxZ) return;
+  b.updateWorld();
+  const fingerTip = b.kind === 'finger';
+  const muS = fingerTip ? 0.6 : BUTTER_MU_S, muK = fingerTip ? 0.45 : BUTTER_MU_K, e = b.e * 0.45;
+  for (const p of b.parts) {
+    if (p.type === 0) {
+      const R = p.r + PR;
+      for (let i = 0; i < butter.ns; i++) {
+        const dx = BX[i] - p.wx; if (dx > R || dx < -R) continue;
+        const dy = BY[i] - p.wy; if (dy > R || dy < -R) continue;
+        const dz = BZ[i] - p.wz; if (dz > R || dz < -R) continue;
+        if (dx * dx + dy * dy + dz * dz >= R * R) continue;
+        // closest point of the sphere to the particle; the gap is then just PR
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6, k = Math.min(p.r, d) / d;
+        if (shellContact(b, i, p.wx + dx * k, p.wy + dy * k, p.wz + dz * k, PR + (p.r - Math.min(p.r, d)), muS, muK, e)) b.updateWorld();
+      }
+    } else {
+      boxSamples(b, p);
+      const ext = Math.hypot(p.hx, p.hy, p.hz) + PR;
+      for (let i = 0; i < butter.ns; i++) {
+        const x = BX[i], y = BY[i], z = BZ[i];
+        if (x < p.minX - PR || x > p.maxX + PR || y < p.minY - PR || y > p.maxY + PR || z < p.minZ - PR || z > p.maxZ + PR) continue;
+        if (Math.abs(x - p.wx) > ext || Math.abs(y - p.wy) > ext || Math.abs(z - p.wz) > ext) continue;
+        toBoxLocal(b, p, x, y, z);
+        const hx = p.hx, hy = p.hy, hz = p.hz;
+        let cx = clamp(lX, -hx, hx), cy = clamp(lY, -hy, hy), cz = clamp(lZ, -hz, hz), gap = PR;
+        if (cx === lX && cy === lY && cz === lZ) {        // particle inside the box: closest face point
+          const fx = hx - Math.abs(lX), fy = hy - Math.abs(lY), fz = hz - Math.abs(lZ);
+          if (fx <= fy && fx <= fz) { cx = (Math.sign(lX) || 1) * hx; gap = PR + fx; }
+          else if (fy <= fz) { cy = (Math.sign(lY) || 1) * hy; gap = PR + fy; }
+          else { cz = (Math.sign(lZ) || 1) * hz; gap = PR + fz; }
+          cx = lX; cy = lY; cz = lZ;                       // the body point is where the particle is
+        }
+        const R = b.R;
+        const qx = p.wx + R[0] * cx + R[1] * cy + R[2] * cz, qy = p.wy + R[3] * cx + R[4] * cy + R[5] * cz, qz = p.wz + R[6] * cx + R[7] * cy + R[8] * cz;
+        if (shellContact(b, i, qx, qy, qz, gap, muS, muK, e)) { b.updateWorld(); boxSamples(b, p); }
+      }
+    }
+  }
+  if (b.cc > 0) b.onButter = true;
+}
+
+function solveCollisions() {
+  butterBounds();
+  for (let a = 0; a < bodies.length; a++)
+    for (let c = a + 1; c < bodies.length; c++) collideBodies(bodies[a], bodies[c]);
+  for (const b of bodies) collideBodyButter(b);
+  for (const b of bodies) collideBodyWorld(b);
+}
+
+// Ray-parity test straight up from (x, y, z) through the butter surface. Returns the
+// height of the highest surface crossing above the point if it is inside, else NaN.
+function butterCeilingAbove(x, y, z) {
+  if (x < bb.minX || x > bb.maxX || y < bb.minY || y > bb.maxY || z < bb.minZ || z > bb.maxZ) return NaN;
+  const T = butter.tris;
+  let hits = 0, top = -Infinity;
+  for (let t = 0; t < butter.nt; t++) {
+    const a = T[3 * t], b = T[3 * t + 1], c = T[3 * t + 2];
+    const ax = BX[a] - x, az = BZ[a] - z, bx = BX[b] - x, bz = BZ[b] - z, cx = BX[c] - x, cz = BZ[c] - z;
+    // does the vertical line through (x, z) cross the triangle's xz projection?
+    const s1 = ax * bz - az * bx, s2 = bx * cz - bz * cx, s3 = cx * az - cz * ax;
+    if (!((s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0))) continue;
+    const S = s1 + s2 + s3;
+    if (Math.abs(S) < 1e-9) continue;
+    const yy = (s2 * BY[a] + s3 * BY[b] + s1 * BY[c]) / S;
+    if (yy > y) { hits++; if (yy > top) top = yy; }
+  }
+  return (hits & 1) === 1 ? top : NaN;
+}
+function insideButter(x, y, z) { return !Number.isNaN(butterCeilingAbove(x, y, z)); }
+
+// Anything that got through the shell (rare) is lifted straight up to sit on the top
+// skin above where it was, keeping its sideways motion; no sideways teleports.
+function rescueTrappedBodies() {
+  butterBounds();
+  for (const b of bodies) {
+    const top = butterCeilingAbove(b.x, b.y, b.z);
+    if (Number.isNaN(top)) continue;
+    b.updateWorld();
+    let below = 0;                                     // how far the body reaches below its centre
+    for (const p of b.parts) {
+      if (p.type === 0) below = Math.max(below, b.y - p.wy + p.r);
+      else { boxSamples(b, p); for (let k = 1; k < 24; k += 3) below = Math.max(below, b.y - p.ws[k]); }
+    }
+    const ny = Math.min(top + below + PR + 1, ARENA.top - b.radius);
+    const dy = ny - b.y;
+    b.y += dy; b.py += dy; b.sy += dy;
+    if (b.vy < 0) b.vy = 0;
+    b.updateWorld();
+  }
+}
+
+/* =========================================================================
+   4. MOUSE INTERACTION
+   Orbit camera, ray picking, and the three hands: Pinch grabs the exact spot
+   (a patch of particles) with a soft XPBD spring; Whole holds the butter and
+   lets you fling it; Press drives a force-limited fingertip that pokes and
+   squashes. Objects are held by the exact point clicked. Dragging happens on
+   a camera-facing plane; throw velocity comes from recent pointer history.
+   ========================================================================= */
+
+const PINCH_RADIUS = 46, PINCH_COMPLIANCE = 1 / 380;
+const WHOLE_RADIUS = 230, WHOLE_COMPLIANCE = 1 / 900;
+const OBJECT_COMPLIANCE = 1 / 1600;
+const GRAB_MAX_MOVE = 3;                 // max correction per substep (caps the force)
+const FINGER_R = 24, FINGER_MASS = 4, FINGER_ACCEL = 24000;
+const THROW_WINDOW = 90, MAX_THROW = 4200;
+
+const camera = {
+  yaw: 0, pitch: 0.4, dist: 1050, tx: 0, ty: 95, tz: 0, fov: 38 * Math.PI / 180,
+  eye: [0, 0, 0], fwd: [0, 0, -1], view: new Float32Array(16), proj: new Float32Array(16),
+  vp: new Float32Array(16), invVp: new Float32Array(16), aspect: 1, minDist: 480, maxDist: 2600, baseDist: 1050, basePitch: 0.4,
+};
+
+const pointer = {
+  sx: 0, sy: 0, down: false, id: null, mode: null,
+  x: 0, y: 0, z: 0,                              // latest drag target (world)
+  simX: 0, simY: 0, simZ: 0, stepX0: 0, stepY0: 0, stepZ0: 0, stepX1: 0, stepY1: 0, stepZ1: 0, tx: 0, ty: 0, tz: 0,
+  planeX: 0, planeY: 0, planeZ: 0, planeNX: 0, planeNY: 0, planeNZ: 1,
+  hist: [], orbitX: 0, orbitY: 0,
+};
+const grab = {
+  n: 0, idx: new Int32Array(2048), wt: new Float64Array(2048), ox: new Float64Array(2048), oy: new Float64Array(2048), oz: new Float64Array(2048),
+  compliance: 0, body: null, lx: 0, ly: 0, lz: 0, minY: 0,
+};
+const touches = new Map();               // active touch pointers on the background (pinch-zoom)
+let finger = null;
+let grabModeUI = 'pinch';
+
+// ---- camera ----
+function updateCamera(shx = 0, shy = 0) {
+  const c = camera, cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
+  const tx = c.tx + shx, ty = c.ty + shy, tz = c.tz;
+  c.eye[0] = tx + c.dist * cp * Math.sin(c.yaw);
+  c.eye[1] = ty + c.dist * sp;
+  c.eye[2] = tz + c.dist * cp * Math.cos(c.yaw);
+  const fx = tx - c.eye[0], fy = ty - c.eye[1], fz = tz - c.eye[2], fl = Math.hypot(fx, fy, fz);
+  c.fwd[0] = fx / fl; c.fwd[1] = fy / fl; c.fwd[2] = fz / fl;
+  mat4LookAt(c.view, c.eye, [tx, ty, tz], [0, 1, 0]);
+  mat4Perspective(c.proj, c.fov, c.aspect, 20, 9000);
+  mat4Mul(c.vp, c.proj, c.view);
+  mat4Invert(c.invVp, c.vp);
+}
+function resetCamera() {
+  camera.yaw = 0; camera.pitch = camera.basePitch; camera.dist = camera.baseDist; camera.tx = 0; camera.ty = 95; camera.tz = 0;
+}
+
+// screen point → world ray (origin = eye)
+function screenRay(sx, sy) {
+  const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+  const nx = 2 * sx / w - 1, ny = 1 - 2 * sy / h;
+  const a = transformPoint(camera.invVp, nx, ny, -1), b = transformPoint(camera.invVp, nx, ny, 1);
+  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], l = Math.hypot(dx, dy, dz);
+  return { ox: a[0], oy: a[1], oz: a[2], dx: dx / l, dy: dy / l, dz: dz / l };
+}
+function rayPlane(ray, px, py, pz, nx, ny, nz) {
+  const den = ray.dx * nx + ray.dy * ny + ray.dz * nz;
+  if (Math.abs(den) < 1e-6) return null;
+  const t = ((px - ray.ox) * nx + (py - ray.oy) * ny + (pz - ray.oz) * nz) / den;
+  return t > 0 ? [ray.ox + ray.dx * t, ray.oy + ray.dy * t, ray.oz + ray.dz * t] : null;
+}
+
+// ---- picking ----
+function rayTriangle(ray, ax, ay, az, bx, by, bz, cx, cy, cz) {      // Möller–Trumbore → t or -1
+  const e1x = bx - ax, e1y = by - ay, e1z = bz - az, e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
+  const px = ray.dy * e2z - ray.dz * e2y, py = ray.dz * e2x - ray.dx * e2z, pz = ray.dx * e2y - ray.dy * e2x;
+  const det = e1x * px + e1y * py + e1z * pz;
+  if (Math.abs(det) < 1e-9) return -1;
+  const inv = 1 / det, sx = ray.ox - ax, sy = ray.oy - ay, sz = ray.oz - az;
+  const u = (sx * px + sy * py + sz * pz) * inv;
+  if (u < 0 || u > 1) return -1;
+  const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x;
+  const v = (ray.dx * qx + ray.dy * qy + ray.dz * qz) * inv;
+  if (v < 0 || u + v > 1) return -1;
+  const t = (e2x * qx + e2y * qy + e2z * qz) * inv;
+  return t > 0 ? t : -1;
+}
+// against the drawn (smoothed) butter surface
+function pickButter(ray) {
+  const P = drawMesh.pos, T = butter.sub.tris;
+  if (!drawMesh.ready) return null;
+  // quick reject with the drawn bounds
+  const bnd = drawMesh.bounds, inv = [1 / ray.dx, 1 / ray.dy, 1 / ray.dz];
+  let t0 = -Infinity, t1 = Infinity;
+  const o = [ray.ox, ray.oy, ray.oz];
+  for (let a = 0; a < 3; a++) {
+    let ta = (bnd[a] - o[a]) * inv[a], tb = (bnd[a + 3] - o[a]) * inv[a];
+    if (ta > tb) { const s = ta; ta = tb; tb = s; }
+    t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+  }
+  if (t0 > t1 || t1 < 0) return null;
+  let best = Infinity, bt = -1;
+  for (let t = 0; t < T.length; t += 3) {
+    const a = 3 * T[t], b = 3 * T[t + 1], c = 3 * T[t + 2];
+    const d = rayTriangle(ray, P[a], P[a + 1], P[a + 2], P[b], P[b + 1], P[b + 2], P[c], P[c + 1], P[c + 2]);
+    if (d > 0 && d < best) { best = d; bt = t; }
+  }
+  if (bt < 0) return null;
+  const a = 3 * T[bt], b = 3 * T[bt + 1], c = 3 * T[bt + 2];
+  const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+  let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+  const nl = Math.hypot(nx, ny, nz) || 1;
+  return { t: best, x: ray.ox + ray.dx * best, y: ray.oy + ray.dy * best, z: ray.oz + ray.dz * best, nx: nx / nl, ny: ny / nl, nz: nz / nl };
+}
+function pickBody(b, ray) {               // nearest t on the body's parts, or -1
+  b.updateWorld();
+  let best = -1;
+  const R = b.R;
+  for (const p of b.parts) {
+    let t = -1;
+    if (p.type === 0) {
+      const ox = ray.ox - p.wx, oy = ray.oy - p.wy, oz = ray.oz - p.wz, r = p.r + 4;
+      const B = ox * ray.dx + oy * ray.dy + oz * ray.dz, C = ox * ox + oy * oy + oz * oz - r * r, D = B * B - C;
+      if (D >= 0) { t = -B - Math.sqrt(D); if (t < 0) t = -B + Math.sqrt(D); }
+    } else {
+      // slab test in the part's local frame
+      const ox = ray.ox - p.wx, oy = ray.oy - p.wy, oz = ray.oz - p.wz;
+      const lo = [R[0] * ox + R[3] * oy + R[6] * oz, R[1] * ox + R[4] * oy + R[7] * oz, R[2] * ox + R[5] * oy + R[8] * oz];
+      const ld = [R[0] * ray.dx + R[3] * ray.dy + R[6] * ray.dz, R[1] * ray.dx + R[4] * ray.dy + R[7] * ray.dz, R[2] * ray.dx + R[5] * ray.dy + R[8] * ray.dz];
+      const h = [p.hx + 4, p.hy + 4, p.hz + 4];
+      let t0 = -Infinity, t1 = Infinity;
+      for (let a = 0; a < 3; a++) {
+        if (Math.abs(ld[a]) < 1e-9) { if (Math.abs(lo[a]) > h[a]) { t0 = Infinity; break; } continue; }
+        let ta = (-h[a] - lo[a]) / ld[a], tb = (h[a] - lo[a]) / ld[a];
+        if (ta > tb) { const s = ta; ta = tb; tb = s; }
+        t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      }
+      if (t0 <= t1 && t1 > 0) t = t0 > 0 ? t0 : t1;
+    }
+    if (t > 0 && (best < 0 || t < best)) best = t;
+  }
+  return best;
+}
+function pickObject(ray) {
+  let best = null, bt = Infinity;
+  for (const b of bodies) {
+    if (b.kind === 'finger') continue;
+    const t = pickBody(b, ray);
+    if (t > 0 && t < bt) { bt = t; best = b; }
+  }
+  return best ? { body: best, t: bt } : null;
+}
+function pickFloor(ray) {
+  if (ray.dy >= -1e-6) return null;
+  const t = -ray.oy / ray.dy;
+  return { t, x: ray.ox + ray.dx * t, y: 0, z: ray.oz + ray.dz * t };
+}
+
+// ---- pointer history / throw velocity ----
+function pushHistory(x, y, z, t = performance.now()) {
+  const h = pointer.hist;
+  h.push({ t, x, y, z });
+  while (h.length > 2 && t - h[0].t > 250) h.shift();
+}
+function throwVelocity() {
+  const h = pointer.hist, now = performance.now();
+  if (h.length < 2 || now - h[h.length - 1].t > 70) return { x: 0, y: 0, z: 0 };
+  let i0 = h.length - 1;
+  while (i0 > 0 && now - h[i0 - 1].t <= THROW_WINDOW) i0--;
+  const a = h[i0], b = h[h.length - 1], dt = (b.t - a.t) / 1000;
+  if (dt < 0.008) return { x: 0, y: 0, z: 0 };
+  let vx = (b.x - a.x) / dt, vy = (b.y - a.y) / dt, vz = (b.z - a.z) / dt;
+  const sp = Math.hypot(vx, vy, vz);
+  if (sp > MAX_THROW) { const k = MAX_THROW / sp; vx *= k; vy *= k; vz *= k; }
+  return { x: vx, y: vy, z: vz };
+}
+
+// Set the drag plane through (x, y, z), facing the camera, and put the target there.
+function setDragPlane(x, y, z) {
+  pointer.planeX = x; pointer.planeY = y; pointer.planeZ = z;
+  pointer.planeNX = -camera.fwd[0]; pointer.planeNY = -camera.fwd[1]; pointer.planeNZ = -camera.fwd[2];
+  pointer.x = pointer.simX = pointer.stepX0 = pointer.stepX1 = pointer.tx = x;
+  pointer.y = pointer.simY = pointer.stepY0 = pointer.stepY1 = pointer.ty = y;
+  pointer.z = pointer.simZ = pointer.stepZ0 = pointer.stepZ1 = pointer.tz = z;
+  pointer.hist.length = 0;
+  pushHistory(x, y, z);
+}
+function dragTargetFromScreen(sx, sy) {
+  const p = rayPlane(screenRay(sx, sy), pointer.planeX, pointer.planeY, pointer.planeZ, pointer.planeNX, pointer.planeNY, pointer.planeNZ);
+  if (!p) return null;
+  // keep the hand inside the play area: dragging into a wall or the floor never fights the arena
+  p[0] = clamp(p[0], -ARENA.x + 12, ARENA.x - 12);
+  p[1] = clamp(p[1], 4, ARENA.top - 20);
+  p[2] = clamp(p[2], -ARENA.z + 12, ARENA.z - 12);
+  return p;
+}
+
+// Decide what a press does: grab an object, the butter, poke, or orbit the camera.
+function beginInteraction(sx, sy, opts) {
+  const ray = screenRay(sx, sy);
+  const obj = pickObject(ray), hitB = pickButter(ray);
+  const press = opts.press || grabModeUI === 'press';
+  if (press) {
+    let hx, hy, hz, nx = 0, ny = 1, nz = 0;
+    if (hitB && (!obj || hitB.t < obj.t)) { hx = hitB.x; hy = hitB.y; hz = hitB.z; nx = hitB.nx; ny = hitB.ny; nz = hitB.nz; }
+    else if (obj) { const t = obj.t; hx = ray.ox + ray.dx * t; hy = ray.oy + ray.dy * t; hz = ray.oz + ray.dz * t; nx = -ray.dx; ny = -ray.dy; nz = -ray.dz; }
+    else {
+      const f = pickFloor(ray);
+      // poking only happens inside the tray; anywhere else the drag orbits the camera
+      if (!f || Math.abs(f.x) > ARENA.x - FINGER_R || Math.abs(f.z) > ARENA.z - FINGER_R) { beginOrbit(sx, sy); return; }
+      hx = f.x; hy = f.y; hz = f.z;
+    }
+    const off = FINGER_R + 3;
+    beginFinger(hx + nx * off, Math.max(FINGER_R + 1, hy + ny * off), hz + nz * off);
+    return;
+  }
+  if (obj && (!hitB || obj.t <= hitB.t)) {
+    const t = obj.t;
+    beginObjectGrab(obj.body, ray.ox + ray.dx * t, ray.oy + ray.dy * t, ray.oz + ray.dz * t);
+    return;
+  }
+  if (hitB) {
+    const whole = grabModeUI === 'whole' || !!opts.whole;
+    beginButterGrab(hitB.x, hitB.y, hitB.z, whole);
+    return;
+  }
+  beginOrbit(sx, sy);
+}
+
+function beginOrbit(sx, sy) {
+  pointer.mode = 'orbit';
+  pointer.orbitX = sx; pointer.orbitY = sy;
+}
+
+function beginObjectGrab(b, x, y, z) {
+  pointer.mode = 'object';
+  grab.body = b; b.held = true;
+  b.updateWorld();
+  const R = b.R, dx = x - b.x, dy = y - b.y, dz = z - b.z;
+  grab.lx = R[0] * dx + R[3] * dy + R[6] * dz; grab.ly = R[1] * dx + R[4] * dy + R[7] * dz; grab.lz = R[2] * dx + R[5] * dy + R[8] * dz;
+  setDragPlane(x, y, z);
+}
+
+function beginButterGrab(x, y, z, whole) {
+  pointer.mode = whole ? 'whole' : 'pinch';
+  grab.n = 0;
+  const Rg = whole ? WHOLE_RADIUS : PINCH_RADIUS, count = whole ? butter.n : butter.ns;
+  for (let i = 0; i < count && grab.n < grab.idx.length; i++) {
+    const d = Math.hypot(BX[i] - x, BY[i] - y, BZ[i] - z);
+    if (d < Rg) { const u = 1 - (d / Rg) * (d / Rg); addGrab(i, u * u, x, y, z); }
+  }
+  if (grab.n === 0) {                     // fall back to the nearest particle
+    let bi = 0, bd = Infinity;
+    for (let i = 0; i < butter.ns; i++) { const d = (BX[i] - x) ** 2 + (BY[i] - y) ** 2 + (BZ[i] - z) ** 2; if (d < bd) { bd = d; bi = i; } }
+    addGrab(bi, 1, x, y, z);
+  }
+  grab.compliance = whole ? WHOLE_COMPLIANCE : PINCH_COMPLIANCE;
+  // pressing a whole grab down can flatten the butter to ~40% of its height, not into the floor
+  butterBounds();
+  grab.minY = PR + 0.4 * Math.max(0, y - (bb.minY - PR));
+  setDragPlane(x, y, z);
+}
+function addGrab(i, w, x, y, z) {
+  const k = grab.n++;
+  grab.idx[k] = i; grab.wt[k] = w; grab.ox[k] = BX[i] - x; grab.oy[k] = BY[i] - y; grab.oz[k] = BZ[i] - z;
+}
+
+function beginFinger(x, y, z) {
+  pointer.mode = 'finger';
+  finger = buildBody('finger', [{ shape: 'sphere', x: 0, y: 0, z: 0, r: 6, m: FINGER_MASS }],
+    { restitution: 0, friction: 0.9, noRotation: true });
+  finger.noGravity = true;
+  finger.x = finger.px = finger.sx = x; finger.y = finger.py = finger.sy = y; finger.z = finger.pz = finger.sz = z;
+  finger.updateWorld();
+  bodies.push(finger);
+  setDragPlane(x, y, z);
+}
+
+function endInteraction() {
+  const v = throwVelocity(), mode = pointer.mode;
+  if (mode === 'object' && grab.body) {
+    const b = grab.body;
+    b.held = false;
+    b.vx = lerp(b.vx, v.x, 0.6); b.vy = lerp(b.vy, v.y, 0.6); b.vz = lerp(b.vz, v.z, 0.6);
+  } else if (mode === 'whole') {
+    let vx = 0, vy = 0, vz = 0;
+    for (let i = 0; i < butter.n; i++) { vx += BVX[i]; vy += BVY[i]; vz += BVZ[i]; }
+    vx /= butter.n; vy /= butter.n; vz /= butter.n;
+    const dx = (v.x - vx) * 0.7, dy = (v.y - vy) * 0.7, dz = (v.z - vz) * 0.7;
+    for (let i = 0; i < butter.n; i++) { BVX[i] += dx; BVY[i] += dy; BVZ[i] += dz; }
+  } else if (mode === 'pinch') {
+    for (let k = 0; k < grab.n; k++) {
+      const i = grab.idx[k], f = 0.45 * grab.wt[k];
+      BVX[i] += (v.x - BVX[i]) * f; BVY[i] += (v.y - BVY[i]) * f; BVZ[i] += (v.z - BVZ[i]) * f;
+    }
+  } else if (mode === 'finger' && finger) {
+    const k = bodies.indexOf(finger);
+    if (k >= 0) bodies.splice(k, 1);
+    finger = null;
+  }
+  pointer.mode = null; grab.n = 0; grab.body = null;
+}
+
+// Soft XPBD springs from the grabbed particles / object point to the (interpolated) target.
+function solveGrab(h) {
+  const tx = pointer.tx, ty = pointer.ty, tz = pointer.tz, ih2 = 1 / (h * h);
+  if (pointer.mode === 'whole') {
+    // Hold the butter as a whole: one shared translation pulls the grabbed region toward
+    // the target, so its shape stays free to squash against the floor and bulge sideways
+    // (pinning every particle to a fixed offset would crush its volume).
+    const gy = Math.max(ty, grab.minY);
+    let sw = 0, ex = 0, ey = 0, ez = 0;
+    for (let k = 0; k < grab.n; k++) {
+      const i = grab.idx[k], w = grab.wt[k];
+      ex += w * (tx + grab.ox[k] - BX[i]); ey += w * (gy + grab.oy[k] - BY[i]); ez += w * (tz + grab.oz[k] - BZ[i]); sw += w;
+    }
+    ex /= sw; ey /= sw; ez /= sw;
+    const em = Math.sqrt(ex * ex + ey * ey + ez * ez);
+    if (em > GRAB_MAX_MOVE) { const s = GRAB_MAX_MOVE / em; ex *= s; ey *= s; ez *= s; }
+    for (let k = 0; k < grab.n; k++) {
+      const i = grab.idx[k];
+      const f = BW[i] / (BW[i] + grab.compliance / grab.wt[k] * ih2) * (butter.onFloor[i] ? 0.2 : 1);
+      BX[i] += ex * f; BY[i] += ey * f; BZ[i] += ez * f;
+    }
+  } else if (pointer.mode === 'pinch') {
+    for (let k = 0; k < grab.n; k++) {
+      const i = grab.idx[k];
+      const dx = tx + grab.ox[k] - BX[i], dy = Math.max(ty + grab.oy[k], PR) - BY[i], dz = tz + grab.oz[k] - BZ[i];
+      const f = BW[i] / (BW[i] + grab.compliance / grab.wt[k] * ih2);
+      let mx = dx * f, my = dy * f, mz = dz * f;
+      const m = Math.sqrt(mx * mx + my * my + mz * mz);
+      if (m > GRAB_MAX_MOVE) { const s = GRAB_MAX_MOVE / m; mx *= s; my *= s; mz *= s; }
+      BX[i] += mx; BY[i] += my; BZ[i] += mz;
+    }
+  } else if (pointer.mode === 'object' && grab.body) {
+    const b = grab.body, R = b.R;
+    const rx = R[0] * grab.lx + R[1] * grab.ly + R[2] * grab.lz, ry = R[3] * grab.lx + R[4] * grab.ly + R[5] * grab.lz, rz = R[6] * grab.lx + R[7] * grab.ly + R[8] * grab.lz;
+    const dx = tx - (b.x + rx), dy = ty - (b.y + ry), dz = tz - (b.z + rz), d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (d < 1e-6) return;
+    const nx = dx / d, ny = dy / d, nz = dz / d;
+    setBody(SA, b, b.x + rx, b.y + ry, b.z + rz);
+    const w = sideInvMass(SA, nx, ny, nz);
+    let dl = d / (w + OBJECT_COMPLIANCE * ih2);
+    const maxDl = GRAB_MAX_MOVE * 1.5 / (b.invM + 1e-9);
+    if (dl > maxDl) dl = maxDl;
+    sideMove(SA, nx * dl, ny * dl, nz * dl);
+  }
+}
+
+// Velocity damping toward the target's motion so held things don't oscillate forever.
+function grabDamping(dt) {
+  const tvx = (pointer.stepX1 - pointer.stepX0) / dt, tvy = (pointer.stepY1 - pointer.stepY0) / dt, tvz = (pointer.stepZ1 - pointer.stepZ0) / dt;
+  if (pointer.mode === 'pinch' || pointer.mode === 'whole') {
+    const base = 1 - Math.exp(-(pointer.mode === 'whole' ? 7 : 9) * dt);
+    for (let k = 0; k < grab.n; k++) {
+      const i = grab.idx[k], f = base * grab.wt[k];
+      BVX[i] += (tvx - BVX[i]) * f; BVY[i] += (tvy - BVY[i]) * f; BVZ[i] += (tvz - BVZ[i]) * f;
+    }
+  } else if (pointer.mode === 'object' && grab.body) {
+    const b = grab.body, f = 1 - Math.exp(-5 * dt), a = Math.exp(-2.5 * dt);
+    b.vx += (tvx - b.vx) * f; b.vy += (tvy - b.vy) * f; b.vz += (tvz - b.vz) * f;
+    b.wx *= a; b.wy *= a; b.wz *= a;
+  }
+}
+
+// The fingertip is a dynamic, force-limited sphere that chases the target:
+// it can press hard, but the butter and the floor can still push back.
+function driveFinger(h) {
+  const f = finger, p = f.parts[0];
+  if (p.r < FINGER_R) { p.r = Math.min(FINGER_R, p.r + 260 * h); f.radius = p.r; }
+  let vx = (pointer.tx - f.x) / 0.025, vy = (pointer.ty - f.y) / 0.025, vz = (pointer.tz - f.z) / 0.025;
+  const sp = Math.hypot(vx, vy, vz);
+  if (sp > 3500) { const k = 3500 / sp; vx *= k; vy *= k; vz *= k; }
+  let ax = vx - f.vx, ay = vy - f.vy, az = vz - f.vz;
+  const am = Math.hypot(ax, ay, az), lim = FINGER_ACCEL * h;
+  if (am > lim) { const k = lim / am; ax *= k; ay *= k; az *= k; }
+  f.vx += ax; f.vy += ay; f.vz += az;
+}
+
+/* =========================================================================
+   5. OBJECT SPAWNING
+   Object definitions (shape, mass, bounciness, friction), spawning, how
+   objects settle on the butter, and — at the end of this section — the fixed
+   simulation step that ties sections 1–5 together.
+   ========================================================================= */
+
+const MAX_OBJECTS = 24;
+const OBJECT_DEFS = {
+  small:  () => buildBody('small', [{ shape: 'sphere', x: 0, y: 0, z: 0, r: 15, m: 0.25 }], { restitution: 0.45, friction: 0.5 }),
+  metal:  () => buildBody('metal', [{ shape: 'sphere', x: 0, y: 0, z: 0, r: 27, m: 8 }], { restitution: 0.1, friction: 0.35 }),
+  cube:   () => buildBody('cube', [{ shape: 'box', x: 0, y: 0, z: 0, hx: 23, hy: 23, hz: 23, m: 1.2 }], { restitution: 0.18, friction: 0.6 }),
+  rubber: () => buildBody('rubber', [{ shape: 'sphere', x: 0, y: 0, z: 0, r: 21, m: 0.5 }], { restitution: 0.88, friction: 0.85 }),
+  hammer: () => buildBody('hammer', [
+    { shape: 'box', x: -10, y: 0, z: 0, hx: 62, hy: 6.5, hz: 6.5, m: 0.6 },   // wooden handle
+    { shape: 'box', x: 62, y: 0, z: 0, hx: 15, hy: 30, hz: 13, m: 3.2 },      // steel head
+  ], { restitution: 0.12, friction: 0.5 }),
+};
+const SPAWN_KEYS = ['small', 'metal', 'cube', 'rubber', 'hammer'];
+
+const bodies = [];                       // all rigid bodies (objects + finger while poking)
+
+function randomQuat() {
+  const u = Math.random(), v = Math.random() * TAU, w = Math.random() * TAU;
+  const a = Math.sqrt(1 - u), b = Math.sqrt(u);
+  return [a * Math.sin(v), a * Math.cos(v), b * Math.sin(w), b * Math.cos(w)];
+}
+
+function spawnObject(kind, x, y, z, vx = 0, vy = 0, vz = 0) {
+  const b = OBJECT_DEFS[kind]();
+  const r = b.radius;
+  b.x = clamp(x, -ARENA.x + r, ARENA.x - r); b.y = clamp(y, r, ARENA.top - r); b.z = clamp(z, -ARENA.z + r, ARENA.z - r);
+  b.q = kind === 'hammer' ? [0, 0, Math.sin((Math.random() - 0.5) * 0.6), Math.cos((Math.random() - 0.5) * 0.6)] : randomQuat();
+  quatNormalize(b.q);
+  b.vx = vx; b.vy = vy; b.vz = vz;
+  b.wx = (Math.random() - 0.5) * 4; b.wy = (Math.random() - 0.5) * 4; b.wz = (Math.random() - 0.5) * 4;
+  b.px = b.sx = b.x; b.py = b.sy = b.y; b.pz = b.sz = b.z;
+  b.pq = b.q.slice(); b.sq = b.q.slice();
+  b.updateWorld();
+  bodies.splice(finger ? bodies.length - 1 : bodies.length, 0, b);
+  // keep the scene light: remove the oldest objects that aren't being held
+  let count = bodies.filter(o => o.kind !== 'finger').length;
+  for (let k = 0; k < bodies.length && count > MAX_OBJECTS; k++) {
+    if (bodies[k].kind !== 'finger' && !bodies[k].held && bodies[k] !== b) { bodies.splice(k, 1); k--; count--; }
+  }
+  return b;
+}
+
+const OBJECT_RADIUS = { small: 15, metal: 27, cube: 40, rubber: 21, hammer: 72 };
+
+// Where an object dragged out of the panel appears: on the cursor ray, in front of the
+// butter or any object under the cursor, otherwise on a camera-facing plane through the
+// butter, and always above the floor and inside the tray.
+function spawnPointOnRay(ray, r) {
+  let t = Infinity;
+  const hb = pickButter(ray), ho = pickObject(ray);
+  if (hb) t = Math.min(t, hb.t - (r + PR + 6));
+  if (ho) t = Math.min(t, ho.t - (r + 6));
+  if (!isFinite(t)) {
+    const p = rayPlane(ray, butter.cx, Math.max(butter.cy, 120), butter.cz, -camera.fwd[0], -camera.fwd[1], -camera.fwd[2]);
+    t = p ? Math.hypot(p[0] - ray.ox, p[1] - ray.oy, p[2] - ray.oz) : 900;
+  }
+  if (ray.dy < -1e-6) t = Math.min(t, (r + 2 - ray.oy) / ray.dy);    // stay above the floor along the ray
+  t = Math.max(t, 50);
+  return [clamp(ray.ox + ray.dx * t, -ARENA.x + r, ARENA.x - r), Math.max(ray.oy + ray.dy * t, r + 2), clamp(ray.oz + ray.dz * t, -ARENA.z + r, ARENA.z - r)];
+}
+
+function dropObject(kind) {              // drop from above the butter, clear of other objects
+  const r = OBJECT_RADIUS[kind];
+  let x = 0, y = 600, z = 0;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    x = butter.cx + (Math.random() - 0.5) * 220; z = butter.cz + (Math.random() - 0.5) * 120; y = 560 + attempt * 25;
+    if (bodies.every(o => Math.hypot(o.x - x, o.y - y, o.z - z) > o.radius + r + 4)) break;
+  }
+  return spawnObject(kind, x, Math.min(y, ARENA.top - r - 5), z);
+}
+
+function clearObjects() {
+  if (pointer.mode === 'object') endInteraction();
+  for (let k = bodies.length - 1; k >= 0; k--) if (bodies[k].kind !== 'finger') bodies.splice(k, 1);
+}
+
+function resetButter() {
+  if (pointer.mode === 'pinch' || pointer.mode === 'whole') endInteraction();
+  placeButter(0, HALF[1] + PR + 70, 0);
+}
+function resetAll() {
+  if (pointer.mode && pointer.mode !== 'orbit') endInteraction();
+  clearObjects();
+  resetButter();
+}
+
+// After the substeps: drag, spin damping, how objects ride on the butter, and resting.
+function settleBody(b, dt) {
+  const touching = b.cc > 0;
+  if (b.kind !== 'finger') {
+    // spin: almost free in flight, rolling resistance on the floor, tacky on the butter
+    const ld = Math.exp(-(params.gravityOn ? 0.03 : 0.8) * dt);
+    const ad = Math.exp(-(touching ? 7 : b.floorContact ? (b.parts[0].type === 0 ? 0.35 : 1.2) : 0.04) * dt);
+    b.vx *= ld; b.vy *= ld; b.vz *= ld; b.wx *= ad; b.wy *= ad; b.wz *= ad;
+    if (touching && !b.held) {
+      let ux = -b.cnx, uy = -b.cny, uz = -b.cnz;                 // butter → object
+      const ul = Math.hypot(ux, uy, uz) || 1;
+      ux /= ul; uy /= ul; uz /= ul;
+      // the butter body's own (rigid) velocity where the object sits
+      const ox = b.x - butter.cx, oy = b.y - butter.cy, oz = b.z - butter.cz;
+      const cx = butter.vcx + butter.wy * oz - butter.wz * oy, cy = butter.vcy + butter.wz * ox - butter.wx * oz, cz = butter.vcz + butter.wx * oy - butter.wy * ox;
+      if (!b.wasOnButter) {                                      // first touch: remember how hard it came in
+        b.impact = Math.max(0, -((b.svx - cx) * ux + (b.svy - cy) * uy + (b.svz - cz) * uz));
+        b.contactT = 0;
+      }
+      b.contactT += dt;
+      // viscous, tacky butter: an object resting on it moves with the butter body (sideways it
+      // doesn't roll off; along the normal it sinks / rises slowly instead of bobbing)
+      const fT = 1 - Math.exp(-tune.sink * dt), fN = 1 - Math.exp(-0.5 * tune.sink * dt);
+      const rx = b.vx - cx, ry = b.vy - cy, rz = b.vz - cz, rn = rx * ux + ry * uy + rz * uz;
+      const bn = (b.vx - cx) * ux + (b.vy - cy) * uy + (b.vz - cz) * uz;
+      b.vx -= (rx - rn * ux) * fT + ux * bn * fN; b.vy -= (ry - rn * uy) * fT + uy * bn * fN; b.vz -= (rz - rn * uz) * fT + uz * bn * fN;
+      // bounce shaping: the butter's spring-back may push an object out only as fast as the
+      // object's own restitution allows (otherwise everything would rebound alike). Only the
+      // outward push gained this step is limited, so objects still fly off a butter that stops.
+      const gain = (b.vx - b.svx) * ux + (b.vy - b.svy + gravity() * (b.noGravity ? 0 : dt)) * uy + (b.vz - b.svz) * uz;
+      const vout = (b.vx - cx) * ux + (b.vy - cy) * uy + (b.vz - cz) * uz, cap = Math.max(b.e, 0.12) * b.impact;
+      if (gain > 0 && vout > cap) { const k = Math.min(gain, vout - cap); b.vx -= ux * k; b.vy -= uy * k; b.vz -= uz * k; }
+      b.lux = ux; b.luy = uy; b.luz = uz; b.lvx = cx; b.lvy = cy; b.lvz = cz;
+    } else if (b.wasOnButter && !b.held && b.e > 0.5) {
+      // leaving the butter: bouncy objects get their spring back
+      const vout = (b.vx - b.lvx) * b.lux + (b.vy - b.lvy) * b.luy + (b.vz - b.lvz) * b.luz, want = b.e * 0.8 * b.impact;
+      if (vout > 0 && vout < want) { const k = want - vout; b.vx += b.lux * k; b.vy += b.luy * k; b.vz += b.luz * k; }
+    }
+    // resting on the floor: snap tiny residual motion to zero so nothing creeps forever
+    const sp = Math.hypot(b.vx, b.vy, b.vz), spin = Math.hypot(b.wx, b.wy, b.wz);
+    b.restTime = b.floorContact && !touching && !b.held && sp < 5 && spin < 0.08 ? b.restTime + dt : 0;
+    if (b.restTime > 0.25) { b.vx = b.vy = b.vz = 0; b.wx = b.wy = b.wz = 0; }
+  }
+  b.wasOnButter = touching; b.onButter = touching;
+  b.cc = 0; b.cnx = b.cny = b.cnz = 0;
+  b.floorContact = false;
+}
+
+// ---------- the fixed simulation step (ties sections 1–5 together) ----------
+let shake = 0;
+function step(dt) {
+  const h = dt / SUBSTEPS, g = gravity(), n = butter.n;
+  deriveParams();
+  BSX.set(BX); BSY.set(BY); BSZ.set(BZ);
+  for (const b of bodies) {
+    b.sx = b.x; b.sy = b.y; b.sz = b.z; b.sq[0] = b.q[0]; b.sq[1] = b.q[1]; b.sq[2] = b.q[2]; b.sq[3] = b.q[3];
+    b.svx = b.vx; b.svy = b.vy; b.svz = b.vz;
+  }
+  const bvx0 = butter.vcx, bvy0 = butter.vcy, bvz0 = butter.vcz;
+  vertexNormals(BX, BY, BZ);              // surface normals for the curvature memory (once per step is plenty)
+  const holding = pointer.mode === 'pinch' || pointer.mode === 'whole' || pointer.mode === 'object' || pointer.mode === 'finger';
+
+  for (let s = 0; s < SUBSTEPS; s++) {
+    const f = (s + 1) / SUBSTEPS;
+    pointer.tx = lerp(pointer.stepX0, pointer.stepX1, f);
+    pointer.ty = lerp(pointer.stepY0, pointer.stepY1, f);
+    pointer.tz = lerp(pointer.stepZ0, pointer.stepZ1, f);
+    if (finger) driveFinger(h);
+
+    // predict
+    for (let i = 0; i < n; i++) {
+      BVY[i] -= g * h;
+      BPX[i] = BX[i]; BPY[i] = BY[i]; BPZ[i] = BZ[i];
+      BX[i] += BVX[i] * h; BY[i] += BVY[i] * h; BZ[i] += BVZ[i] * h;
+    }
+    for (const b of bodies) {
+      if (!b.noGravity) b.vy -= g * h;
+      b.px = b.x; b.py = b.y; b.pz = b.z;
+      b.pq[0] = b.q[0]; b.pq[1] = b.q[1]; b.pq[2] = b.q[2]; b.pq[3] = b.q[3];
+      b.x += b.vx * h; b.y += b.vy * h; b.z += b.vz * h;
+      quatRotate(b.q, b.wx * h, b.wy * h, b.wz * h);
+      quatToMat3(b.q, b.R);
+    }
+
+    // constraints
+    if (holding) solveGrab(h);
+    butterShapeMatch();
+    butterEdges(h);
+    butterCurvature();
+    butterVolume();
+    solveCollisions();
+    collideButterWorld(h);
+
+    // velocities from positions (+ clamps against explosions)
+    const ih = 1 / h, maxV2 = MAX_PARTICLE_SPEED * MAX_PARTICLE_SPEED;
+    for (let i = 0; i < n; i++) {
+      let vx = (BX[i] - BPX[i]) * ih, vy = (BY[i] - BPY[i]) * ih, vz = (BZ[i] - BPZ[i]) * ih;
+      const v2 = vx * vx + vy * vy + vz * vz;
+      if (v2 > maxV2) { const k = MAX_PARTICLE_SPEED / Math.sqrt(v2); vx *= k; vy *= k; vz *= k; }
+      BVX[i] = vx; BVY[i] = vy; BVZ[i] = vz;
+    }
+    for (const b of bodies) {
+      b.vx = (b.x - b.px) * ih; b.vy = (b.y - b.py) * ih; b.vz = (b.z - b.pz) * ih;
+      quatDelta(b.q, b.pq);
+      b.wx = tX * ih; b.wy = tY * ih; b.wz = tZ * ih;
+      const sp = Math.hypot(b.vx, b.vy, b.vz);
+      if (sp > MAX_BODY_SPEED) { const k = MAX_BODY_SPEED / sp; b.vx *= k; b.vy *= k; b.vz *= k; }
+      const w = Math.hypot(b.wx, b.wy, b.wz);
+      if (w > MAX_BODY_SPIN) { const k = MAX_BODY_SPIN / w; b.wx *= k; b.wy *= k; b.wz *= k; }
+    }
+    solveBounces();
+  }
+
+  dampButter(dt);
+  if (holding) grabDamping(dt);
+  for (const b of bodies) settleBody(b, dt);
+  updatePlasticity(dt);
+  measureSquash();
+  rescueTrappedBodies();
+
+  // tangle watchdog: folded patches → ramp up shape memory until it has unfolded
+  // (gently while the user is holding it); a long-lived fold relaxes the stiff limits
+  if (countFlipped() > 2) butter.tangleTime += dt; else butter.tangleTime = 0;
+  const heldButter = pointer.mode === 'pinch' || pointer.mode === 'whole';
+  butter.smBoost = butter.tangleTime > 0.2 ? Math.min(heldButter ? 0.004 : 0.03, butter.smBoost * 1.15 + 2e-5) : butter.smBoost * 0.85;
+  butter.rescue = !heldButter && butter.tangleTime > 0.4;
+
+  // only very heavy impacts (momentum change within one step) → a little screen shake
+  const SHAKE_J = 6500;
+  for (const b of bodies) {
+    if (b.held || b.kind === 'finger') continue;
+    const J = b.m * Math.hypot(b.vx - b.svx, b.vy - b.svy, b.vz - b.svz);
+    if (J > SHAKE_J) shake = Math.max(shake, Math.min(1, (J - SHAKE_J) / 9000) * 9);
+  }
+  if (!pointer.mode || pointer.mode === 'object' || pointer.mode === 'orbit') {
+    const J = params.mass * Math.hypot(butter.vcx - bvx0, butter.vcy - bvy0, butter.vcz - bvz0);
+    if (J > SHAKE_J) shake = Math.max(shake, Math.min(1, (J - SHAKE_J) / 9000) * 9);
+  }
+
+  // safety net: if anything went non-finite, put it back together
+  if (!isFinite(butter.cx + butter.cy + butter.cz)) resetButter();
+  for (let k = bodies.length - 1; k >= 0; k--) {
+    const b = bodies[k];
+    if (!isFinite(b.x + b.y + b.z + b.q[0] + b.q[1] + b.q[2] + b.q[3])) {
+      if (b === grab.body) endInteraction();
+      if (b === finger) { finger = null; if (pointer.mode === 'finger') pointer.mode = null; }
+      bodies.splice(k, 1);
+    }
+  }
+}
+
+/* =========================================================================
+   6. RENDERING
+   Plain WebGL 2: a soft PCF shadow map from the key light, wrap-diffuse +
+   two-lobe specular lighting with darker grazing edges, procedural object
+   materials, analytic contact shadows on the floor, and a Loop-subdivided
+   butter surface rebuilt every frame from the particles.
+   ========================================================================= */
+
+const canvas = document.getElementById('stage');
+const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'high-performance' });
+const LIGHT_DIR = (() => { const v = [-0.38, 0.9, 0.3], l = Math.hypot(...v); return v.map(c => c / l); })();
+const SHADOW_SIZE = 2048;
+
+// ---- small matrix library (column-major Float32Array(16)) ----
+function mat4Mul(o, a, b) {
+  const r = new Float32Array(16);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    r[j * 4 + i] = a[i] * b[j * 4] + a[4 + i] * b[j * 4 + 1] + a[8 + i] * b[j * 4 + 2] + a[12 + i] * b[j * 4 + 3];
+  }
+  o.set(r);
+  return o;
+}
+function mat4Perspective(o, fov, aspect, near, far) {
+  const f = 1 / Math.tan(fov / 2), nf = 1 / (near - far);
+  o.fill(0);
+  o[0] = f / aspect; o[5] = f; o[10] = (far + near) * nf; o[11] = -1; o[14] = 2 * far * near * nf;
+  return o;
+}
+function mat4Ortho(o, l, r, b, t, n, f) {
+  o.fill(0);
+  o[0] = 2 / (r - l); o[5] = 2 / (t - b); o[10] = -2 / (f - n);
+  o[12] = -(r + l) / (r - l); o[13] = -(t + b) / (t - b); o[14] = -(f + n) / (f - n); o[15] = 1;
+  return o;
+}
+function mat4LookAt(o, eye, at, up) {
+  let zx = eye[0] - at[0], zy = eye[1] - at[1], zz = eye[2] - at[2];
+  let l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+  let xx = up[1] * zz - up[2] * zy, xy = up[2] * zx - up[0] * zz, xz = up[0] * zy - up[1] * zx;
+  l = Math.hypot(xx, xy, xz); xx /= l; xy /= l; xz /= l;
+  const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+  o[0] = xx; o[1] = yx; o[2] = zx; o[3] = 0;
+  o[4] = xy; o[5] = yy; o[6] = zy; o[7] = 0;
+  o[8] = xz; o[9] = yz; o[10] = zz; o[11] = 0;
+  o[12] = -(xx * eye[0] + xy * eye[1] + xz * eye[2]);
+  o[13] = -(yx * eye[0] + yy * eye[1] + yz * eye[2]);
+  o[14] = -(zx * eye[0] + zy * eye[1] + zz * eye[2]);
+  o[15] = 1;
+  return o;
+}
+function mat4Invert(o, m) {
+  const a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3], a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7];
+  const a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11], a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15];
+  const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11;
+  const b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12, b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30;
+  const b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+  let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  if (!det) return o;
+  det = 1 / det;
+  o[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det; o[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+  o[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det; o[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+  o[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det; o[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+  o[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det; o[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+  o[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det; o[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+  o[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det; o[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+  o[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det; o[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+  o[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det; o[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+  return o;
+}
+function transformPoint(m, x, y, z) {
+  const w = m[3] * x + m[7] * y + m[11] * z + m[15];
+  return [(m[0] * x + m[4] * y + m[8] * z + m[12]) / w, (m[1] * x + m[5] * y + m[9] * z + m[13]) / w, (m[2] * x + m[6] * y + m[10] * z + m[14]) / w];
+}
+function poseMatrix(o, x, y, z, q, s = 1) {
+  const m = tmpM3;
+  quatToMat3(q, m);
+  o[0] = m[0] * s; o[1] = m[3] * s; o[2] = m[6] * s; o[3] = 0;
+  o[4] = m[1] * s; o[5] = m[4] * s; o[6] = m[7] * s; o[7] = 0;
+  o[8] = m[2] * s; o[9] = m[5] * s; o[10] = m[8] * s; o[11] = 0;
+  o[12] = x; o[13] = y; o[14] = z; o[15] = 1;
+  return o;
+}
+const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+const srgb = hex => [1, 3, 5].map(k => Math.pow(parseInt(hex.slice(k, k + 2), 16) / 255, 2.2));
+
+// ---- shaders ----
+const LIGHTING_GLSL = `
+vec3 srgbToLin(vec3 c) { return pow(c, vec3(2.2)); }
+uniform vec3 uLightDir;
+uniform vec3 uEye;
+uniform mat4 uLightVP;
+uniform highp sampler2DShadow uShadow;
+uniform float uShadowTexel;
+const vec2 POISSON[16] = vec2[16](
+  vec2(-0.942, -0.399), vec2(0.946, -0.769), vec2(-0.094, -0.929), vec2(0.345, 0.294),
+  vec2(-0.916, 0.458), vec2(-0.815, -0.879), vec2(-0.383, 0.277), vec2(0.975, 0.756),
+  vec2(0.443, -0.975), vec2(0.537, -0.474), vec2(-0.265, -0.419), vec2(0.792, 0.191),
+  vec2(-0.242, 0.997), vec2(-0.814, 0.914), vec2(0.200, 0.786), vec2(0.144, -0.141));
+float shadowAt(vec3 wp, vec3 n) {
+  vec4 lp = uLightVP * vec4(wp + n * 2.0, 1.0);
+  vec3 p = lp.xyz / lp.w * 0.5 + 0.5;
+  if (p.x <= 0.0 || p.x >= 1.0 || p.y <= 0.0 || p.y >= 1.0 || p.z >= 1.0) return 1.0;
+  float s = 0.0;
+  for (int i = 0; i < 16; i++) s += texture(uShadow, vec3(p.xy + POISSON[i] * uShadowTexel * 5.5, p.z - 0.0012));
+  return s / 16.0;
+}
+vec3 envColor(vec3 r) {          // simple studio environment for metal reflections
+  vec3 top = vec3(1.0, 0.97, 0.93), hor = vec3(0.74, 0.70, 0.64), flo = vec3(0.50, 0.44, 0.37);
+  vec3 c = r.y > 0.0 ? mix(hor, top, pow(r.y, 0.55)) : mix(hor, flo, pow(-r.y, 0.45));
+  c += vec3(1.6) * pow(max(dot(r, uLightDir), 0.0), 80.0);
+  return c;
+}
+vec3 shade(vec3 base, vec3 N, vec3 wp, float wrap, float s1, float p1, float s2, float p2, float rim, float metal) {
+  vec3 V = normalize(uEye - wp), L = uLightDir;
+  float ndl = dot(N, L);
+  float sh = shadowAt(wp, N);
+  float diff = max((ndl + wrap) / (1.0 + wrap), 0.0) * mix(0.32, 1.0, sh);
+  vec3 H = normalize(L + V);
+  float nh = max(dot(N, H), 0.0);
+  float spec = (s1 * pow(nh, p1) + s2 * pow(nh, p2)) * sh * smoothstep(-0.1, 0.2, ndl);
+  vec3 amb = mix(vec3(0.60, 0.53, 0.44), vec3(1.0, 0.97, 0.92), N.y * 0.5 + 0.5) * 0.45;
+  vec3 col = base * (amb + vec3(1.0, 0.96, 0.90) * diff * 0.82);
+  if (metal > 0.0) {
+    vec3 R = reflect(-V, N);
+    float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+    vec3 env = envColor(R) * mix(0.65, 1.0, sh);
+    col = mix(col, env * base * 1.25 + fres * 0.15, metal);
+  }
+  col += vec3(1.0, 0.98, 0.94) * spec;
+  float graze = 1.0 - max(dot(N, V), 0.0);
+  col *= 1.0 - rim * graze * graze;            // slightly darker edges for depth
+  return col;
+}
+`;
+
+const VS_LIT = `#version 300 es
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+uniform mat4 uModel;
+uniform mat4 uVP;
+out vec3 vWorld; out vec3 vNormal; out vec3 vLocal;
+void main() {
+  vec4 wp = uModel * vec4(aPos, 1.0);
+  vWorld = wp.xyz; vNormal = mat3(uModel) * aNormal; vLocal = aPos;
+  gl_Position = uVP * wp;
+}`;
+
+const FS_LIT = `#version 300 es
+precision highp float;
+in vec3 vWorld; in vec3 vNormal; in vec3 vLocal;
+uniform int uKind;        // 0 butter, 1 small ball, 2 metal ball, 3 cube, 4 rubber ball, 5 hammer, 6 tray, 7 fingertip, 8 flat colour
+uniform vec3 uBase;
+uniform vec3 uCom;
+uniform float uAlpha;
+out vec4 outColor;
+${LIGHTING_GLSL}
+void main() {
+  vec3 N = normalize(vNormal);
+  if (!gl_FrontFacing) N = -N;
+  vec3 base = uBase, col;
+  if (uKind == 8) { outColor = vec4(pow(base, vec3(1.0 / 2.2)), uAlpha); return; }
+  if (uKind == 0) {                                   // butter
+    base *= mix(0.78, 1.0, smoothstep(0.0, 70.0, vWorld.y));    // a touch darker where it meets the floor
+    col = shade(base, N, vWorld, 0.5, 0.10, 18.0, 0.42, 150.0, 0.34, 0.0);
+    vec3 V = normalize(uEye - vWorld);
+    col += base * vec3(1.0, 0.92, 0.78) * 0.16 * max(dot(N, normalize(V + vec3(0.0, 0.35, 0.0))), 0.0);   // soft warm fill
+    col += vec3(0.36, 0.21, 0.03) * pow(max(-dot(N, uLightDir), 0.0), 1.5) * 0.4;                         // warm translucency
+  } else if (uKind == 1) {                            // small ball: blue with a white seam
+    vec3 p = normalize(vLocal);
+    float seam = abs(p.y - 0.42 * cos(2.0 * atan(p.z, p.x)) * sqrt(max(1.0 - p.y * p.y, 0.0)));
+    base = mix(base, vec3(0.95, 0.95, 0.92), 1.0 - smoothstep(0.035, 0.06, seam));
+    col = shade(base, N, vWorld, 0.25, 0.25, 30.0, 0.35, 120.0, 0.25, 0.0);
+  } else if (uKind == 2) {                            // heavy metal ball
+    col = shade(base, N, vWorld, 0.1, 0.0, 1.0, 0.9, 260.0, 0.1, 0.92);
+  } else if (uKind == 3) {                            // wooden toy cube with an inset frame
+    vec3 a = abs(vLocal) / 23.0;
+    vec2 uv = a.x > a.y && a.x > a.z ? a.yz : (a.y > a.z ? a.xz : a.xy);
+    float m = max(uv.x, uv.y);
+    base *= 1.0 + 0.16 * (smoothstep(0.60, 0.64, m) - smoothstep(0.70, 0.74, m));
+    col = shade(base, N, vWorld, 0.25, 0.18, 24.0, 0.18, 90.0, 0.25, 0.0);
+  } else if (uKind == 4) {                            // rubber ball: red with a cream band
+    vec3 p = normalize(vLocal);
+    base = mix(base, srgbToLin(vec3(0.955, 0.89, 0.76)), 1.0 - smoothstep(0.21, 0.24, abs(p.y)));
+    col = shade(base, N, vWorld, 0.3, 0.2, 18.0, 0.35, 70.0, 0.25, 0.0);
+  } else if (uKind == 5) {                            // hammer: steel head, wooden handle, rubber grip
+    float x = vLocal.x + uCom.x;
+    if (x > 46.0) col = shade(srgbToLin(vec3(0.62, 0.66, 0.71)), N, vWorld, 0.1, 0.1, 20.0, 0.7, 180.0, 0.15, 0.55);
+    else if (x < -33.0) col = shade(srgbToLin(vec3(0.37, 0.29, 0.24)), N, vWorld, 0.3, 0.06, 12.0, 0.1, 40.0, 0.2, 0.0);
+    else {
+      vec3 wood = srgbToLin(vec3(0.84, 0.62, 0.40)) * (0.93 + 0.07 * sin(x * 0.9 + sin(vLocal.y * 0.7 + vLocal.z * 0.5) * 2.5));
+      col = shade(wood, N, vWorld, 0.3, 0.14, 24.0, 0.12, 80.0, 0.2, 0.0);
+    }
+  } else if (uKind == 9) {                            // faint glass walls of the play area
+    float fade = 1.0 - smoothstep(30.0, 460.0, vWorld.y);
+    outColor = vec4(pow(base, vec3(1.0 / 2.2)), uAlpha * fade);
+    return;
+  } else if (uKind == 7) {                            // translucent fingertip
+    col = shade(base, N, vWorld, 0.4, 0.2, 30.0, 0.0, 1.0, 0.0, 0.0);
+  } else {                                            // tray
+    col = shade(base, N, vWorld, 0.35, 0.05, 12.0, 0.0, 1.0, 0.1, 0.0);
+  }
+  outColor = vec4(pow(max(col, 0.0), vec3(1.0 / 2.2)), uAlpha);
+}`;
+
+const VS_FLOOR = `#version 300 es
+layout(location = 0) in vec3 aPos;
+uniform mat4 uVP;
+out vec3 vWorld;
+void main() { vWorld = aPos; gl_Position = uVP * vec4(aPos, 1.0); }`;
+
+const FS_FLOOR = `#version 300 es
+precision highp float;
+in vec3 vWorld;
+uniform vec3 uFloor; uniform vec3 uMat; uniform vec3 uBgTop; uniform vec3 uBgBottom; uniform float uViewH;
+uniform vec2 uArena;
+uniform vec4 uOccA[28];   // centre x, centre z, radius a, radius b
+uniform vec4 uOccB[28];   // cos, sin, height above floor, strength
+uniform int uOccN;
+out vec4 outColor;
+${LIGHTING_GLSL}
+void main() {
+  vec3 N = vec3(0.0, 1.0, 0.0);
+  vec2 p = vWorld.xz;
+  // inside the tray the floor is a slightly lighter mat
+  vec2 q = abs(p) - uArena;
+  float inMat = 1.0 - smoothstep(-6.0, 2.0, max(q.x, q.y));
+  vec3 base = mix(uFloor, uMat, inMat);
+  float ao = 0.0;
+  for (int i = 0; i < 28; i++) {
+    if (i >= uOccN) break;
+    vec4 A = uOccA[i], B = uOccB[i];
+    vec2 d = p - A.xy;
+    vec2 l = vec2(d.x * B.x + d.y * B.y, -d.x * B.y + d.y * B.x);
+    float h = B.z, spread = 1.0 + h * 0.008;
+    float e = length(l / (A.zw * spread));
+    float a = B.w * (1.0 - smoothstep(0.35, 1.25, e)) * max(exp(-h / 110.0), 0.12);
+    ao = 1.0 - (1.0 - ao) * (1.0 - a);
+  }
+  vec3 col = shade(base, N, vWorld, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0);
+  col *= 1.0 - 0.55 * ao;
+  vec3 outc = pow(max(col, 0.0), vec3(1.0 / 2.2));
+  vec3 bg = mix(uBgBottom, uBgTop, smoothstep(0.0, 1.0, gl_FragCoord.y / uViewH));   // same as the backdrop
+  outColor = vec4(mix(outc, bg, smoothstep(900.0, 3000.0, length(p))), 1.0);
+}`;
+
+const VS_SHADOW = `#version 300 es
+layout(location = 0) in vec3 aPos;
+uniform mat4 uModel; uniform mat4 uLightVP;
+void main() { gl_Position = uLightVP * uModel * vec4(aPos, 1.0); }`;
+const FS_SHADOW = `#version 300 es
+precision mediump float;
+void main() {}`;
+
+const VS_BG = `#version 300 es
+const vec2 P[3] = vec2[3](vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
+out vec2 vUv;
+void main() { vUv = P[gl_VertexID] * 0.5 + 0.5; gl_Position = vec4(P[gl_VertexID], 0.9999, 1.0); }`;
+const FS_BG = `#version 300 es
+precision mediump float;
+in vec2 vUv;
+uniform vec3 uTop; uniform vec3 uBottom;
+out vec4 outColor;
+void main() { outColor = vec4(mix(uBottom, uTop, smoothstep(0.0, 1.0, vUv.y)), 1.0); }`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) + '\n' + src);
+  return s;
+}
+function program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) {
+    const info = gl.getActiveUniform(p, i), name = info.name.replace(/\[0\]$/, '');
+    u[name] = gl.getUniformLocation(p, info.name);
+  }
+  return { p, u };
+}
+
+// ---- geometry ----
+function sphereGeometry(seg = 36, rings = 24) {
+  const pos = [], nor = [], idx = [];
+  for (let r = 0; r <= rings; r++) {
+    const v = r / rings, th = v * Math.PI;
+    for (let s = 0; s <= seg; s++) {
+      const ph = s / seg * TAU, x = Math.sin(th) * Math.cos(ph), y = Math.cos(th), z = Math.sin(th) * Math.sin(ph);
+      pos.push(x, y, z); nor.push(x, y, z);
+    }
+  }
+  for (let r = 0; r < rings; r++) for (let s = 0; s < seg; s++) {
+    const a = r * (seg + 1) + s, b = a + seg + 1;
+    idx.push(a, a + 1, b, a + 1, b + 1, b);
+  }
+  return { pos, nor, idx };
+}
+// rounded box (Minkowski sum of a box and a sphere) with analytic normals
+function roundedBoxGeometry(hx, hy, hz, r, ox = 0, oy = 0, oz = 0, out = { pos: [], nor: [], idx: [] }) {
+  const h = [hx, hy, hz], inner = h.map(v => Math.max(v - r, 0));
+  const samples = a => {                             // dense near the rounded edges
+    const s = [], K = 5, hi = h[a], ii = inner[a];
+    for (let k = K; k >= 1; k--) s.push(-ii - (hi - ii) * Math.sin(k / K * Math.PI / 2));
+    const m = Math.max(1, Math.ceil(2 * ii / 9));
+    for (let k = 0; k <= m; k++) s.push(-ii + 2 * ii * k / m);
+    for (let k = 1; k <= K; k++) s.push(ii + (hi - ii) * Math.sin(k / K * Math.PI / 2));
+    return s;
+  };
+  for (let ax = 0; ax < 3; ax++) for (const sg of [-1, 1]) {
+    const u = (ax + 1) % 3, v = (ax + 2) % 3, su = samples(u), sv = samples(v), base = out.pos.length / 3;
+    for (const cu of su) for (const cv of sv) {
+      const p = [0, 0, 0];
+      p[ax] = sg * h[ax]; p[u] = cu; p[v] = cv;
+      const c = p.map((x, k) => clamp(x, -inner[k], inner[k]));
+      let d = [p[0] - c[0], p[1] - c[1], p[2] - c[2]], dl = Math.hypot(...d);
+      if (dl < 1e-9) { d = [0, 0, 0]; d[ax] = sg; dl = 1; }
+      const nx = d[0] / dl, ny = d[1] / dl, nz = d[2] / dl;
+      out.pos.push(c[0] + nx * r + ox, c[1] + ny * r + oy, c[2] + nz * r + oz);
+      out.nor.push(nx, ny, nz);
+    }
+    const nv = sv.length;
+    for (let i = 0; i < su.length - 1; i++) for (let j = 0; j < nv - 1; j++) {
+      const a = base + i * nv + j, b = a + nv, c = a + 1, d = b + 1;
+      // keep outward winding: the (u, v, ax) frame is right-handed, flip for the negative side
+      if (sg > 0) out.idx.push(a, b, d, a, d, c); else out.idx.push(a, d, b, a, c, d);
+    }
+  }
+  return out;
+}
+
+function makeMesh(geo, dynamic = false) {
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const pb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, pb);
+  gl.bufferData(gl.ARRAY_BUFFER, geo.pos instanceof Float32Array ? geo.pos : new Float32Array(geo.pos), dynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  let nb = null;
+  if (geo.nor) {
+    nb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, nb);
+    gl.bufferData(gl.ARRAY_BUFFER, geo.nor instanceof Float32Array ? geo.nor : new Float32Array(geo.nor), dynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+  }
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  let big = false;
+  for (let i = 0; i < geo.idx.length; i++) if (geo.idx[i] > 65535) { big = true; break; }
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(geo.idx) : new Uint16Array(geo.idx), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao, pb, nb, count: geo.idx.length, type: big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT };
+}
+
+// ---- the drawn butter surface: one Loop subdivision of the particle mesh, pushed out by PR ----
+const drawMesh = { pos: null, nor: null, ready: false, bounds: [0, 0, 0, 0, 0, 0], tmp: null };
+function buildDrawSurface(alpha) {
+  const S = butter.sub, n = butter.ns, nv = S.nv;
+  if (!drawMesh.pos) { drawMesh.pos = new Float32Array(3 * nv); drawMesh.nor = new Float32Array(3 * nv); drawMesh.tmp = new Float64Array(3 * n); }
+  const P = drawMesh.pos, Nn = drawMesh.nor, C = drawMesh.tmp;
+  for (let i = 0; i < n; i++) {                       // interpolated particle positions
+    C[3 * i] = BSX[i] + (BX[i] - BSX[i]) * alpha;
+    C[3 * i + 1] = BSY[i] + (BY[i] - BSY[i]) * alpha;
+    C[3 * i + 2] = BSZ[i] + (BZ[i] - BSZ[i]) * alpha;
+  }
+  for (let i = 0; i < n; i++) {                       // Loop: even (original) vertices
+    const b = S.beta[i], s0 = S.ringStart[i], s1 = S.ringStart[i + 1], m = s1 - s0;
+    let ax = 0, ay = 0, az = 0;
+    for (let k = s0; k < s1; k++) { const j = S.ringIdx[k]; ax += C[3 * j]; ay += C[3 * j + 1]; az += C[3 * j + 2]; }
+    const w = 1 - m * b;
+    P[3 * i] = C[3 * i] * w + ax * b; P[3 * i + 1] = C[3 * i + 1] * w + ay * b; P[3 * i + 2] = C[3 * i + 2] * w + az * b;
+  }
+  for (let e = 0; e < S.edgeA.length; e++) {          // Loop: odd (edge) vertices
+    const a = 3 * S.edgeA[e], b = 3 * S.edgeB[e], c = 3 * S.edgeC[e], d = 3 * S.edgeD[e], o = 3 * (n + e);
+    P[o] = 0.375 * (C[a] + C[b]) + 0.125 * (C[c] + C[d]);
+    P[o + 1] = 0.375 * (C[a + 1] + C[b + 1]) + 0.125 * (C[c + 1] + C[d + 1]);
+    P[o + 2] = 0.375 * (C[a + 2] + C[b + 2]) + 0.125 * (C[c + 2] + C[d + 2]);
+  }
+  Nn.fill(0);
+  const T = S.tris;
+  for (let t = 0; t < T.length; t += 3) {             // area-weighted vertex normals
+    const a = 3 * T[t], b = 3 * T[t + 1], c = 3 * T[t + 2];
+    const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    Nn[a] += nx; Nn[a + 1] += ny; Nn[a + 2] += nz; Nn[b] += nx; Nn[b + 1] += ny; Nn[b + 2] += nz; Nn[c] += nx; Nn[c + 1] += ny; Nn[c + 2] += nz;
+  }
+  const bnd = drawMesh.bounds;
+  bnd[0] = bnd[1] = bnd[2] = Infinity; bnd[3] = bnd[4] = bnd[5] = -Infinity;
+  for (let i = 0; i < nv; i++) {                       // normalise and push out to the shell surface
+    const o = 3 * i, l = Math.hypot(Nn[o], Nn[o + 1], Nn[o + 2]) || 1;
+    Nn[o] /= l; Nn[o + 1] /= l; Nn[o + 2] /= l;
+    const off = tune.drawOffset;
+    P[o] += Nn[o] * off; P[o + 1] += Nn[o + 1] * off; P[o + 2] += Nn[o + 2] * off;
+    if (P[o + 1] < 0.2) P[o + 1] = 0.2;              // never draw below the floor
+    for (let k = 0; k < 3; k++) { if (P[o + k] < bnd[k]) bnd[k] = P[o + k]; if (P[o + k] > bnd[k + 3]) bnd[k + 3] = P[o + k]; }
+  }
+  drawMesh.ready = true;
+}
+
+// ---- GL resources ----
+let R6 = null;                               // everything the renderer owns (rebuilt on context restore)
+function initGL() {
+  const progLit = program(VS_LIT, FS_LIT), progFloor = program(VS_FLOOR, FS_FLOOR);
+  const progShadow = program(VS_SHADOW, FS_SHADOW), progBg = program(VS_BG, FS_BG);
+  const sphere = makeMesh(sphereGeometry());
+  const cube = makeMesh(roundedBoxGeometry(23, 23, 23, 5));
+  const hb = OBJECT_DEFS.hammer(), hc = hb.com;
+  const hammerGeo = roundedBoxGeometry(62, 6.5, 6.5, 5, -10 - hc[0], -hc[1], -hc[2]);
+  roundedBoxGeometry(15, 30, 13, 4, 62 - hc[0], -hc[1], -hc[2], hammerGeo);
+  const hammer = makeMesh(hammerGeo);
+  // tray rim around the arena
+  const rimGeo = { pos: [], nor: [], idx: [] }, RT = 9, RH = 14;
+  roundedBoxGeometry(ARENA.x + 2 * RT, RH, RT, 6, 0, RH, ARENA.z + RT, rimGeo);
+  roundedBoxGeometry(ARENA.x + 2 * RT, RH, RT, 6, 0, RH, -ARENA.z - RT, rimGeo);
+  roundedBoxGeometry(RT, RH - 0.3, ARENA.z + RT, 6, ARENA.x + RT, RH - 0.3, 0, rimGeo);
+  roundedBoxGeometry(RT, RH - 0.3, ARENA.z + RT, 6, -ARENA.x - RT, RH - 0.3, 0, rimGeo);
+  const rim = makeMesh(rimGeo);
+  const X = ARENA.x, Z = ARENA.z, Ht = ARENA.top;
+  const walls = makeMesh({
+    pos: [-X, 0, -Z, X, 0, -Z, X, Ht, -Z, -X, Ht, -Z,   X, 0, Z, -X, 0, Z, -X, Ht, Z, X, Ht, Z,
+          -X, 0, Z, -X, 0, -Z, -X, Ht, -Z, -X, Ht, Z,   X, 0, -Z, X, 0, Z, X, Ht, Z, X, Ht, -Z],
+    nor: [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1,   0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1,
+          1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,   -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0],
+    idx: [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15],
+  });
+  const F = 6000;
+  const floor = makeMesh({ pos: [-F, 0, -F, F, 0, -F, F, 0, F, -F, 0, F], idx: [0, 2, 1, 0, 3, 2] });
+  const butterMesh = makeMesh({ pos: new Float32Array(3 * butter.sub.nv), nor: new Float32Array(3 * butter.sub.nv), idx: Array.from(butter.sub.tris) }, true);
+  const line = makeMesh({ pos: new Float32Array(6), idx: [0, 1] }, true);
+
+  // shadow map
+  const shadowTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, shadowTex);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+  const shadowFbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, shadowFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, shadowTex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  // light camera: orthographic, covering the whole arena
+  const lightVP = new Float32Array(16), lv = new Float32Array(16), lp = new Float32Array(16);
+  const c = [0, 150, 0], eye = [c[0] + LIGHT_DIR[0] * 1800, c[1] + LIGHT_DIR[1] * 1800, c[2] + LIGHT_DIR[2] * 1800];
+  mat4LookAt(lv, eye, c, [0, 1, 0]);
+  let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+  for (const x of [-ARENA.x - 40, ARENA.x + 40]) for (const y of [0, ARENA.top + 60]) for (const z of [-ARENA.z - 40, ARENA.z + 40]) {
+    const p = transformPoint(lv, x, y, z);
+    for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[k]); mx[k] = Math.max(mx[k], p[k]); }
+  }
+  mat4Ortho(lp, mn[0], mx[0], mn[1], mx[1], -mx[2] - 50, -mn[2] + 50);
+  mat4Mul(lightVP, lp, lv);
+
+  R6 = { progLit, progFloor, progShadow, progBg, sphere, cube, hammer, rim, walls, floor, butterMesh, line, shadowTex, shadowFbo, lightVP,
+    colors: {
+      butter: srgb('#f7d462'), small: srgb('#6f9be0'), metal: srgb('#c9ced6'), cube: srgb('#e5866a'), rubber: srgb('#e2564e'),
+      hammer: srgb('#ffffff'), tray: srgb('#e9e2d6'), finger: srgb('#d9cbb6'), floor: srgb('#d8d0c2'), mat: srgb('#e7e0d4'),
+      glass: srgb('#fffaf2'), bgTop: srgb('#f3efe8'), bgBottom: srgb('#e4ded4'), line: srgb('#6b5a3e'), marker: srgb('#fffaf0'),
+    } };
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+}
+
+const MAX_OCC = 28;
+const modelM = new Float32Array(16), occA = new Float32Array(4 * MAX_OCC), occB = new Float32Array(4 * MAX_OCC);
+const KIND_ID = { small: 1, metal: 2, cube: 3, rubber: 4, hammer: 5 };
+const tmpQr = [0, 0, 0, 1];
+function bodyModel(b, alpha) {
+  quatNlerp(b.sq, b.q, alpha, tmpQr);
+  const s = b.kind === 'small' || b.kind === 'metal' || b.kind === 'rubber' || b.kind === 'finger' ? b.parts[0].r : 1;
+  return poseMatrix(modelM, lerp(b.sx, b.x, alpha), lerp(b.sy, b.y, alpha), lerp(b.sz, b.z, alpha), tmpQr, s);
+}
+function meshFor(b) { return b.kind === 'cube' ? R6.cube : b.kind === 'hammer' ? R6.hammer : R6.sphere; }
+
+function drawMeshGL(mesh, mode = gl.TRIANGLES) {
+  gl.bindVertexArray(mesh.vao);
+  gl.drawElements(mode, mesh.count, mesh.type, 0);
+}
+
+function setLightingUniforms(u) {
+  gl.uniform3fv(u.uLightDir, LIGHT_DIR);
+  gl.uniform3fv(u.uEye, camera.eye);
+  gl.uniformMatrix4fv(u.uLightVP, false, R6.lightVP);
+  gl.uniform1f(u.uShadowTexel, 1 / SHADOW_SIZE);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, R6.shadowTex);
+  gl.uniform1i(u.uShadow, 0);
+}
+
+// soft contact shadows: butter footprint ellipse + one disc per object
+function computeOccluders(alpha) {
+  let count = 0;
+  const P = drawMesh.pos, nv = butter.sub.nv;
+  let minY = Infinity;
+  for (let i = 0; i < nv; i++) minY = Math.min(minY, P[3 * i + 1]);
+  let sx = 0, sz = 0, sxx = 0, szz = 0, sxz = 0, m = 0;
+  for (let i = 0; i < nv; i++) {
+    if (P[3 * i + 1] > minY + 40) continue;
+    const x = P[3 * i], z = P[3 * i + 2];
+    sx += x; sz += z; sxx += x * x; szz += z * z; sxz += x * z; m++;
+  }
+  if (m > 3) {
+    sx /= m; sz /= m;
+    const cxx = sxx / m - sx * sx, czz = szz / m - sz * sz, cxz = sxz / m - sx * sz;
+    const tr = cxx + czz, det = cxx * czz - cxz * cxz, disc = Math.sqrt(Math.max(tr * tr / 4 - det, 0));
+    const l1 = tr / 2 + disc, l2 = Math.max(tr / 2 - disc, 1);
+    const ang = Math.atan2(l1 - cxx, cxz || 1e-9);
+    const ca = Math.abs(cxz) < 1e-6 ? (cxx >= czz ? 1 : 0) : Math.cos(ang), sa = Math.abs(cxz) < 1e-6 ? (cxx >= czz ? 0 : 1) : Math.sin(ang);
+    occA.set([sx, sz, Math.sqrt(3 * l1) + 14, Math.sqrt(3 * l2) + 14], 0);
+    occB.set([ca, sa, Math.max(minY, 0), 0.75], 0);
+    count = 1;
+  }
+  for (let k = bodies.length - 1; k >= 0; k--) {          // newest first
+    const b = bodies[k];
+    if (count >= MAX_OCC) break;
+    const x = lerp(b.sx, b.x, alpha), y = lerp(b.sy, b.y, alpha), z = lerp(b.sz, b.z, alpha);
+    const r = b.kind === 'hammer' ? 34 : b.kind === 'cube' ? 26 : b.parts[0].r;
+    occA.set([x, z, r * 0.95, r * 0.95], 4 * count);
+    occB.set([1, 0, Math.max(y - r, 0), b.kind === 'finger' ? 0.25 : 0.6], 4 * count);
+    count++;
+  }
+  return count;
+}
+
+let followY = 95;
+function render(alpha, dt = 0) {
+  if (!R6) return;
+  // gently follow the butter (or a held object) upward so throws stay in frame
+  const focusY = pointer.mode === 'object' && grab.body ? grab.body.y : butter.cy;
+  const want = 95 + Math.max(0, focusY - 170) * 0.6;
+  followY += (want - followY) * (1 - Math.exp(-2.5 * dt));
+  camera.ty = followY;
+  updateCamera(shakeX, shakeY);
+  buildDrawSurface(alpha);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R6.butterMesh.pb); gl.bufferSubData(gl.ARRAY_BUFFER, 0, drawMesh.pos);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R6.butterMesh.nb); gl.bufferSubData(gl.ARRAY_BUFFER, 0, drawMesh.nor);
+
+  // --- shadow pass ---
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R6.shadowFbo);
+  gl.viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+  gl.clear(gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.POLYGON_OFFSET_FILL);
+  gl.polygonOffset(2.0, 4.0);
+  gl.disable(gl.CULL_FACE);
+  const ps = R6.progShadow;
+  gl.useProgram(ps.p);
+  gl.uniformMatrix4fv(ps.u.uLightVP, false, R6.lightVP);
+  gl.uniformMatrix4fv(ps.u.uModel, false, IDENTITY);
+  drawMeshGL(R6.butterMesh);
+  drawMeshGL(R6.rim);
+  for (const b of bodies) {
+    gl.uniformMatrix4fv(ps.u.uModel, false, bodyModel(b, alpha));
+    drawMeshGL(meshFor(b));
+  }
+  gl.disable(gl.POLYGON_OFFSET_FILL);
+  gl.enable(gl.CULL_FACE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  // --- main pass ---
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0.9, 0.88, 0.85, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  const C = R6.colors;
+  // background gradient
+  gl.depthMask(false);
+  gl.useProgram(R6.progBg.p);
+  gl.uniform3fv(R6.progBg.u.uTop, C.bgTop.map(v => Math.pow(v, 1 / 2.2)));
+  gl.uniform3fv(R6.progBg.u.uBottom, C.bgBottom.map(v => Math.pow(v, 1 / 2.2)));
+  gl.bindVertexArray(null);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.depthMask(true);
+
+  // floor with contact shadows
+  const pf = R6.progFloor;
+  gl.useProgram(pf.p);
+  setLightingUniforms(pf.u);
+  gl.uniformMatrix4fv(pf.u.uVP, false, camera.vp);
+  gl.uniform3fv(pf.u.uFloor, C.floor); gl.uniform3fv(pf.u.uMat, C.mat);
+  gl.uniform3fv(pf.u.uBgTop, C.bgTop.map(v => Math.pow(v, 1 / 2.2))); gl.uniform3fv(pf.u.uBgBottom, C.bgBottom.map(v => Math.pow(v, 1 / 2.2)));
+  gl.uniform1f(pf.u.uViewH, canvas.height);
+  gl.uniform2f(pf.u.uArena, ARENA.x, ARENA.z);
+  const nOcc = computeOccluders(alpha);
+  gl.uniform4fv(pf.u.uOccA, occA); gl.uniform4fv(pf.u.uOccB, occB); gl.uniform1i(pf.u.uOccN, nOcc);
+  drawMeshGL(R6.floor);
+
+  // lit objects
+  const pl = R6.progLit;
+  gl.useProgram(pl.p);
+  setLightingUniforms(pl.u);
+  gl.uniformMatrix4fv(pl.u.uVP, false, camera.vp);
+  gl.uniform1f(pl.u.uAlpha, 1);
+  gl.uniform3f(pl.u.uCom, 0, 0, 0);
+  gl.uniformMatrix4fv(pl.u.uModel, false, IDENTITY);
+  gl.uniform1i(pl.u.uKind, 6); gl.uniform3fv(pl.u.uBase, C.tray);
+  drawMeshGL(R6.rim);
+  gl.uniform1i(pl.u.uKind, 0); gl.uniform3fv(pl.u.uBase, C.butter);
+  drawMeshGL(R6.butterMesh);
+  for (const b of bodies) {
+    if (b.kind === 'finger') continue;
+    gl.uniformMatrix4fv(pl.u.uModel, false, bodyModel(b, alpha));
+    gl.uniform1i(pl.u.uKind, KIND_ID[b.kind]);
+    gl.uniform3fv(pl.u.uBase, C[b.kind]);
+    gl.uniform3fv(pl.u.uCom, b.com);
+    drawMeshGL(meshFor(b));
+  }
+  gl.uniform3f(pl.u.uCom, 0, 0, 0);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+  gl.uniformMatrix4fv(pl.u.uModel, false, IDENTITY);
+  gl.uniform1i(pl.u.uKind, 9); gl.uniform3fv(pl.u.uBase, C.glass); gl.uniform1f(pl.u.uAlpha, 0.22);
+  drawMeshGL(R6.walls);
+  gl.depthMask(true); gl.disable(gl.BLEND); gl.uniform1f(pl.u.uAlpha, 1);
+  drawInteraction(alpha);
+}
+
+// grab marker, connection line and the translucent fingertip
+function drawInteraction(alpha) {
+  if (!pointer.down || !pointer.mode || pointer.mode === 'orbit') return;
+  const pl = R6.progLit, C = R6.colors;
+  let gx, gy, gz;
+  if (pointer.mode === 'finger' && finger) {
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    gl.uniformMatrix4fv(pl.u.uModel, false, bodyModel(finger, alpha));
+    gl.uniform1i(pl.u.uKind, 7); gl.uniform3fv(pl.u.uBase, C.finger); gl.uniform1f(pl.u.uAlpha, 0.42);
+    drawMeshGL(R6.sphere);
+    gl.depthMask(true); gl.disable(gl.BLEND); gl.uniform1f(pl.u.uAlpha, 1);
+    return;
+  }
+  if (pointer.mode === 'pinch' || pointer.mode === 'whole') {
+    let sw = 0; gx = gy = gz = 0;
+    for (let k = 0; k < grab.n; k++) {
+      const i = grab.idx[k], w = grab.wt[k];
+      gx += (lerp(BSX[i], BX[i], alpha) - grab.ox[k]) * w; gy += (lerp(BSY[i], BY[i], alpha) - grab.oy[k]) * w; gz += (lerp(BSZ[i], BZ[i], alpha) - grab.oz[k]) * w; sw += w;
+    }
+    gx /= sw; gy /= sw; gz /= sw;
+  } else if (pointer.mode === 'object' && grab.body) {
+    const b = grab.body, m = bodyModel(b, alpha), s = b.kind === 'small' || b.kind === 'metal' || b.kind === 'rubber' ? b.parts[0].r : 1;
+    gx = m[0] / s * grab.lx + m[4] / s * grab.ly + m[8] / s * grab.lz + m[12];
+    gy = m[1] / s * grab.lx + m[5] / s * grab.ly + m[9] / s * grab.lz + m[13];
+    gz = m[2] / s * grab.lx + m[6] / s * grab.ly + m[10] / s * grab.lz + m[14];
+  } else return;
+  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.uniformMatrix4fv(pl.u.uModel, false, IDENTITY);
+  gl.uniform1i(pl.u.uKind, 8); gl.uniform3fv(pl.u.uBase, C.line); gl.uniform1f(pl.u.uAlpha, 0.55);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R6.line.pb);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array([gx, gy, gz, pointer.x, pointer.y, pointer.z]));
+  drawMeshGL(R6.line, gl.LINES);
+  gl.uniform1i(pl.u.uKind, 7); gl.uniform3fv(pl.u.uBase, C.marker); gl.uniform1f(pl.u.uAlpha, 0.85);
+  gl.uniformMatrix4fv(pl.u.uModel, false, poseMatrix(modelM, pointer.x, pointer.y, pointer.z, [0, 0, 0, 1], 4.5));
+  drawMeshGL(R6.sphere);
+  gl.uniform3fv(pl.u.uBase, C.line);
+  gl.uniformMatrix4fv(pl.u.uModel, false, poseMatrix(modelM, gx, gy, gz, [0, 0, 0, 1], 2.6));
+  drawMeshGL(R6.sphere);
+  gl.uniform1f(pl.u.uAlpha, 1);
+  gl.disable(gl.BLEND);
+  gl.enable(gl.DEPTH_TEST);
+}
+
+let shakeX = 0, shakeY = 0, shakeT = 0;
+function updateShake(dt) {
+  shake *= Math.exp(-11 * dt);
+  if (shake < 0.05) { shake = 0; shakeX = shakeY = 0; return; }
+  shakeT += dt;
+  shakeX = shake * Math.sin(shakeT * 83) * 0.8;
+  shakeY = shake * Math.cos(shakeT * 71);
+}
+
+/* =========================================================================
+   7. UI
+   Panel controls, pointer / wheel / touch wiring, keyboard shortcuts, FPS
+   counter, resize handling and the fixed-timestep main loop.
+   ========================================================================= */
+
+const $ = id => document.getElementById(id);
+const panel = $('panel'), hintEl = $('hint'), fpsEl = $('fps');
+function hideHint() { hintEl.classList.add('gone'); }
+if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+  hintEl.textContent = 'Drag the butter to stretch it · Whole / Press modes in the panel · Drag the background to orbit · Two fingers to zoom';
+
+const resized = { portrait: false, narrow: false };
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cw = window.innerWidth, ch = window.innerHeight;
+  canvas.width = Math.max(1, Math.round(cw * dpr)); canvas.height = Math.max(1, Math.round(ch * dpr));
+  camera.aspect = cw / Math.max(ch, 1);
+  // pull the camera back (and look down more) on narrow / portrait screens so the tray still fits
+  const portrait = camera.aspect < 1;
+  camera.basePitch = portrait ? 0.72 : 0.4;
+  const needed = (ARENA.x * (portrait ? 1.05 : 0.95)) / (Math.tan(camera.fov / 2) * camera.aspect);
+  const base = Math.max(1050, Math.min(needed, 4200));
+  camera.dist *= base / camera.baseDist;
+  camera.baseDist = base;
+  camera.maxDist = Math.max(2600, base * 1.4);
+  camera.dist = clamp(camera.dist, camera.minDist, camera.maxDist);
+  if (portrait && !resized.portrait) camera.pitch = camera.basePitch;
+  resized.portrait = portrait;
+  if (cw < 700 && !resized.narrow) setPanelCollapsed(true);
+  resized.narrow = cw < 700;
+}
+
+// ---- sliders ----
+const sliderDefs = [
+  ['softness', v => Math.round(v * 100) + '%'],
+  ['elasticity', v => Math.round(v * 100) + '%'],
+  ['damping', v => Math.round(v * 100) + '%'],
+  ['gravity', v => Math.round(v)],
+  ['mass', v => v.toFixed(1) + ' kg'],
+];
+for (const [key, fmt] of sliderDefs) {
+  const input = $(key), out = $(key + 'Out');
+  const sync = () => { params[key] = parseFloat(input.value); out.textContent = fmt(params[key]); };
+  input.addEventListener('input', sync);
+  sync();
+}
+
+// ---- buttons ----
+function setGravity(on) { params.gravityOn = on; $('gravityBtn').classList.toggle('on', on); }
+$('gravityBtn').addEventListener('click', () => setGravity(!params.gravityOn));
+$('resetBtn').addEventListener('click', resetAll);
+$('clearObjects').addEventListener('click', clearObjects);
+
+function toggleFullscreen() {
+  const d = document, el = d.documentElement;
+  if (!d.fullscreenElement && !d.webkitFullscreenElement) {
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) { const r = req.call(el); if (r && r.catch) r.catch(() => {}); }
+  } else {
+    const exit = d.exitFullscreen || d.webkitExitFullscreen;
+    if (exit) exit.call(d);
+  }
+}
+$('fullscreenBtn').addEventListener('click', toggleFullscreen);
+const syncFsLabel = () => {
+  $('fullscreenBtn').textContent = (document.fullscreenElement || document.webkitFullscreenElement) ? 'Exit fullscreen' : 'Fullscreen';
+};
+document.addEventListener('fullscreenchange', syncFsLabel);
+document.addEventListener('webkitfullscreenchange', syncFsLabel);
+
+function setPanelCollapsed(c) { panel.classList.toggle('collapsed', c); $('collapse').textContent = c ? '+' : '–'; }
+$('collapse').addEventListener('click', () => setPanelCollapsed(!panel.classList.contains('collapsed')));
+
+const grabSeg = $('grabSeg');
+grabSeg.addEventListener('click', e => {
+  const btn = e.target.closest('button[data-mode]');
+  if (!btn) return;
+  grabModeUI = btn.dataset.mode;
+  for (const b of grabSeg.querySelectorAll('button')) b.classList.toggle('on', b === btn);
+});
+
+// Spawn buttons: click → drop from above; press and drag out → spawn in hand.
+let pendingSpawn = null;
+for (const btn of document.querySelectorAll('.spawn')) {
+  btn.addEventListener('pointerdown', e => {
+    if (pointer.down) return;
+    pendingSpawn = { kind: btn.dataset.kind, x: e.clientX, y: e.clientY, id: e.pointerId, btn };
+    hideHint();
+  });
+  btn.addEventListener('click', e => { if (e.detail === 0) dropObject(btn.dataset.kind); });   // keyboard activation
+}
+
+// ---- pointer on the canvas ----
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch' && pointer.down && pointer.mode === 'orbit') {     // second finger → pinch zoom
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    return;
+  }
+  if (pointer.down) return;
+  if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
+  if (document.activeElement && panel.contains(document.activeElement)) document.activeElement.blur();   // Space/Enter stay ours
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+  pointer.down = true; pointer.id = e.pointerId; pointer.sx = e.clientX; pointer.sy = e.clientY;
+  beginInteraction(e.clientX, e.clientY, { whole: e.button === 2 || e.shiftKey, press: e.altKey || e.ctrlKey || e.metaKey });
+  if (pointer.mode === 'orbit' && e.pointerType === 'touch') touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  updateCursor();
+  hideHint();
+  e.preventDefault();
+});
+
+window.addEventListener('pointermove', e => {
+  if (pendingSpawn && e.pointerId === pendingSpawn.id && !pointer.down) {
+    const dx = e.clientX - pendingSpawn.x, dy = e.clientY - pendingSpawn.y;
+    const r = panel.getBoundingClientRect();
+    const outside = e.clientX > r.right || e.clientY > r.bottom || e.clientX < r.left || e.clientY < r.top;
+    if (Math.hypot(dx, dy) > 14 && outside) {       // dragged out of the panel: spawn it in the hand
+      const p = spawnPointOnRay(screenRay(e.clientX, e.clientY), OBJECT_RADIUS[pendingSpawn.kind]);
+      const b = spawnObject(pendingSpawn.kind, p[0], p[1], p[2]);
+      pendingSpawn = null;
+      pointer.down = true; pointer.id = e.pointerId; pointer.sx = e.clientX; pointer.sy = e.clientY;
+      beginObjectGrab(b, b.x, b.y, b.z);
+      updateCursor();
+    }
+    return;
+  }
+  if (touches.has(e.pointerId)) {
+    const t = touches.get(e.pointerId), prev = touches.size === 2 ? [...touches.values()] : null;
+    const d0 = prev ? Math.hypot(prev[0].x - prev[1].x, prev[0].y - prev[1].y) : 0;
+    t.x = e.clientX; t.y = e.clientY;
+    if (prev) {
+      if (e.pointerId === pointer.id) { pointer.orbitX = e.clientX; pointer.orbitY = e.clientY; }
+      const d1 = Math.hypot(prev[0].x - prev[1].x, prev[0].y - prev[1].y);
+      if (d0 > 10 && d1 > 10) camera.dist = clamp(camera.dist * d0 / d1, camera.minDist, camera.maxDist);
+      return;
+    }
+  }
+  if (pointer.down && e.pointerId === pointer.id) {
+    if (pointer.mode === 'orbit') {
+      camera.yaw -= (e.clientX - pointer.orbitX) * 0.006;
+      camera.pitch = clamp(camera.pitch + (e.clientY - pointer.orbitY) * 0.005, 0.06, 1.3);
+      pointer.orbitX = e.clientX; pointer.orbitY = e.clientY;
+      return;
+    }
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+    const list = evs && evs.length > 1 ? evs : [e];
+    for (const ce of list) {
+      const p = dragTargetFromScreen(ce.clientX, ce.clientY);
+      if (!p) continue;
+      pointer.x = p[0]; pointer.y = p[1]; pointer.z = p[2];
+      pushHistory(p[0], p[1], p[2], ce.timeStamp || e.timeStamp || performance.now());
+    }
+    pointer.sx = e.clientX; pointer.sy = e.clientY;
+  } else if (!pointer.down) {
+    pointer.sx = e.clientX; pointer.sy = e.clientY;
+    hoverDirty = true;
+  }
+});
+
+function pointerUp(e) {
+  if (pendingSpawn && e.pointerId === pendingSpawn.id) {
+    const r = pendingSpawn.btn.getBoundingClientRect();
+    if (e.type === 'pointerup' && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) dropObject(pendingSpawn.kind);
+    pendingSpawn = null;
+    return;
+  }
+  if (touches.has(e.pointerId)) touches.delete(e.pointerId);
+  if (!pointer.down || e.pointerId !== pointer.id) return;
+  if (pointer.mode !== 'orbit') endInteraction(); else pointer.mode = null;
+  pointer.down = false; pointer.id = null;
+  touches.clear();
+  updateCursor();
+}
+window.addEventListener('pointerup', pointerUp);
+window.addEventListener('pointercancel', pointerUp);
+window.addEventListener('blur', () => {
+  if (pointer.down) { if (pointer.mode !== 'orbit') endInteraction(); pointer.mode = null; pointer.down = false; pointer.id = null; }
+  pendingSpawn = null; touches.clear();
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  camera.dist = clamp(camera.dist * Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0012)), camera.minDist, camera.maxDist);
+  hideHint();
+}, { passive: false });
+canvas.addEventListener('dblclick', e => {
+  const ray = screenRay(e.clientX, e.clientY);
+  if (!pickObject(ray) && !pickButter(ray)) resetCamera();
+});
+
+let hoverDirty = false;
+function updateCursor() {
+  let c = 'default';
+  if (pointer.down) c = pointer.mode === 'finger' ? 'none' : 'grabbing';
+  else {
+    const ray = screenRay(pointer.sx, pointer.sy);
+    if (pickObject(ray) || pickButter(ray)) c = grabModeUI === 'press' ? 'pointer' : 'grab';
+  }
+  if (canvas.style.cursor !== c) canvas.style.cursor = c;
+}
+
+// ---- keyboard ----
+window.addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k === 'r') resetAll();
+  else if (k === 'g') setGravity(!params.gravityOn);
+  else if (k === 'f') toggleFullscreen();
+  else if (k === 'h') setPanelCollapsed(!panel.classList.contains('collapsed'));
+  else if (k === 'c') resetCamera();
+  else if (k >= '1' && k <= '5') dropObject(SPAWN_KEYS[+k - 1]);
+  else return;
+  hideHint();
+});
+
+// ---- main loop: fixed timestep + render interpolation ----
+// Runs `steps` fixed steps, moving the drag target smoothly from where the
+// simulation last saw it to the latest pointer position.
+function advance(steps) {
+  const x0 = pointer.simX, y0 = pointer.simY, z0 = pointer.simZ;
+  for (let k = 0; k < steps; k++) {
+    pointer.stepX0 = pointer.simX; pointer.stepY0 = pointer.simY; pointer.stepZ0 = pointer.simZ;
+    const f = (k + 1) / steps;
+    pointer.stepX1 = lerp(x0, pointer.x, f); pointer.stepY1 = lerp(y0, pointer.y, f); pointer.stepZ1 = lerp(z0, pointer.z, f);
+    step(STEP_DT);
+    pointer.simX = pointer.stepX1; pointer.simY = pointer.stepY1; pointer.simZ = pointer.stepZ1;
+  }
+}
+
+let lastTime = performance.now(), accumulator = 0, fpsFrames = 0, fpsTime = 0, paused = false;
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = (now - lastTime) / 1000;
+  lastTime = now;
+  if (!(dt > 0)) dt = 0;
+  const realDt = dt;
+  if (dt > 0.1) dt = 0.1;
+  if (paused) dt = 0;
+  accumulator += dt;
+  let steps = Math.floor(accumulator / STEP_DT);
+  if (steps > MAX_STEPS_PER_FRAME) { steps = MAX_STEPS_PER_FRAME; accumulator = 0; }
+  else accumulator -= steps * STEP_DT;
+  if (steps > 0) advance(steps);
+  updateShake(dt);
+  if (!gl.isContextLost()) render(clamp(accumulator / STEP_DT, 0, 1), realDt);
+  if (hoverDirty && !pointer.down) { hoverDirty = false; updateCursor(); }
+  fpsFrames++; fpsTime += realDt;
+  if (fpsTime >= 0.5) { fpsEl.textContent = Math.round(fpsFrames / fpsTime) + ' FPS'; fpsFrames = 0; fpsTime = 0; }
+}
+
+// ---- boot ----
+if (!gl) {
+  $('nogl').hidden = false;
+  return;
+}
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); R6 = null; });
+canvas.addEventListener('webglcontextrestored', () => { initGL(); });
+buildButterMesh();
+resize();
+deriveParams();
+resetButter();
+initGL();
+updateCamera();
+window.addEventListener('resize', resize);
+document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
+requestAnimationFrame(t => { lastTime = t; frame(t); });
+
+// small debugging / testing handle (deterministic stepping + scripted pointer)
+window.butterToy3d = {
+  params, butter, bodies, tune, camera, ARENA,
+  pause(p = true) { paused = p; },
+  run(steps = 1) { advance(steps); render(1); },
+  sim(steps = 1) { advance(steps); },
+  pressWorld(x, y, z, mode = 'pinch') {
+    pointer.down = true; pointer.id = -1;
+    if (mode === 'object') { const ray = { ox: x, oy: y + 500, oz: z, dx: 0, dy: -1, dz: 0 }; const o = pickObject(ray); if (o) beginObjectGrab(o.body, x, y, z); }
+    else if (mode === 'finger') beginFinger(x, y, z);
+    else beginButterGrab(x, y, z, mode === 'whole');
+    return pointer.mode;
+  },
+  pressScreen(sx, sy, opts = {}) { pointer.down = true; pointer.id = -1; beginInteraction(sx, sy, opts); return pointer.mode; },
+  moveWorld(x, y, z) { pointer.x = x; pointer.y = y; pointer.z = z; pushHistory(x, y, z); },
+  release(vx = 0, vy = 0, vz = 0) {
+    const t = performance.now();
+    pointer.hist.length = 0;
+    pointer.hist.push({ t: t - 50, x: pointer.x - vx * 0.05, y: pointer.y - vy * 0.05, z: pointer.z - vz * 0.05 }, { t, x: pointer.x, y: pointer.y, z: pointer.z });
+    if (pointer.mode && pointer.mode !== 'orbit') endInteraction(); else pointer.mode = null;
+    pointer.down = false; pointer.id = null;
+  },
+  spawn: spawnObject, drop: dropObject, reset: resetAll,
+  get shake() { return shake; },
+  arrays: () => ({ BX, BY, BZ, BVX, BVY, BVZ, stick: butter.stick }),
+  flipped: () => countFlipped(),
+  state() {
+    butterBounds();
+    let V = 0;
+    const T = butter.tris;
+    for (let t = 0; t < butter.nt; t++) {
+      const a = T[3 * t], b = T[3 * t + 1], c = T[3 * t + 2];
+      V += BX[a] * (BY[b] * BZ[c] - BZ[b] * BY[c]) + BY[a] * (BZ[b] * BX[c] - BX[b] * BZ[c]) + BZ[a] * (BX[b] * BY[c] - BY[b] * BX[c]);
+    }
+    return { n: butter.n, nt: butter.nt, ne: butter.ne, cx: butter.cx, cy: butter.cy, cz: butter.cz, q: butter.q.slice(),
+      squash: butter.squash, volRatio: V / 6 / butter.vol0, minX: bb.minX, maxX: bb.maxX, minY: bb.minY, maxY: bb.maxY, minZ: bb.minZ, maxZ: bb.maxZ,
+      boost: butter.smBoost, rescue: butter.rescue,
+      objects: bodies.filter(b => b.kind !== 'finger').map(b => ({ kind: b.kind, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz })) };
+  },
+};
+})();
+</script>
+</body>
+</html>
