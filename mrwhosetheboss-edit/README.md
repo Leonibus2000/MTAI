@@ -12,9 +12,13 @@ from his channel, one per subject slot, listed with URLs and crops in `sources.j
 you're not a bot" / HTTP 429), so the shots are animated stills rather than moving clips. The camera
 moves, shake, blur and outlines supply the motion. S06 is procedural graphics only, as in the reference.
 
+Cutouts use BiRefNet (portrait matte, plus objects in his hands for `held` shots). Mattes are cached in
+`footage/` because CPU inference takes about a minute per still and needs about 8 GB of RAM. The first
+render after `fetch_footage.py stills` computes them, and later renders take about 20 s.
+
 ## Swapping in video clips
 
-Requirements: `pip install yt-dlp rembg[cpu] opencv-python-headless numpy pillow`, plus ffmpeg and the
+Requirements: `pip install yt-dlp rembg[cpu] onnxruntime opencv-python-headless numpy pillow`, plus ffmpeg and the
 fonts in `fonts/` (Anton, Silkscreen, Bungee from @fontsource, OFL-licensed).
 
 0. `python3 fetch_footage.py stills` re-downloads and crops the thumbnails used now.
