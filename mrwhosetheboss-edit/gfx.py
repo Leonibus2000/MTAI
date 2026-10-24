@@ -134,6 +134,23 @@ def text_layer(lines, fontname, size, spacing=0.9, fill=1.0, stroke=0):
     return np.asarray(img, np.float32) / 255, np.asarray(a, np.float32) / 255
 
 
+def watermark(text):
+    """Tall, thin pixel lettering, white with a black keyline (styled after the reference's editor tag)."""
+    f = font("vt323", 120)
+    w = f.getbbox(text)[2] + 40
+    img = Image.new("L", (w, 140), 0)
+    a = Image.new("L", (w, 140), 0)
+    ImageDraw.Draw(img).text((20, 4), text, font=f, fill=255, stroke_width=4, stroke_fill=0)
+    ImageDraw.Draw(a).text((20, 4), text, font=f, fill=255, stroke_width=7, stroke_fill=255)
+    lum = np.asarray(img, np.float32) / 255
+    alpha = np.asarray(a, np.float32) / 255
+    # inner black vertical hairlines, like the reference tag's letterforms
+    cols = (np.arange(w) % 9 == 4)[None, :] & (lum > 0.9)
+    lum = np.where(cols, 0.0, lum)
+    size = (int(w * 1.05), int(140 * 1.45))
+    return cv2.resize(lum, size, interpolation=cv2.INTER_AREA), cv2.resize(alpha, size, interpolation=cv2.INTER_AREA)
+
+
 # ---------------------------------------------------------------- placement
 def place(dst, lum, alpha, cx, cy, scale=1.0, angle=0.0, opacity=1.0):
     h, w = lum.shape

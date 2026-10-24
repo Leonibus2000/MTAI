@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw
 
 import gfx
 from gfx import W, place, sticker
-from timeline import FPS, N_FRAMES, SHOTS, TRANSITIONS
+from timeline import FPS, N_FRAMES, ONSETS, SHOTS, TRANSITIONS
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FOOTAGE = os.environ.get("FOOTAGE_DIR", os.path.join(HERE, "footage"))
@@ -29,12 +29,23 @@ def ease(t):
 
 
 # ---------------------------------------------------------------- subject sources
+_seg = None
+
+
+def seg_session():
+    global _seg
+    if _seg is None:
+        from rembg import new_session
+        _seg = new_session("u2net_human_seg")
+    return _seg
+
+
 class Footage:
     CROP = {"ecu": (1.9, 0.05), "cu": (2.9, 0.35), "mcu": (4.0, 0.9), "ms": (5.6, 1.5)}
 
-    def __init__(self, path, framing):
-        from rembg import new_session
-        self.seg = new_session("u2net_human_seg")
+    def __init__(self, path, framing, scale=1.0):
+        self.scale = scale
+        self.seg = seg_session()
         self._still = None
         if path.endswith(".jpg"):  # pre-cropped square still: the camera moves supply the motion
             f = cv2.imread(path)
@@ -85,6 +96,10 @@ class Footage:
         f = cv2.resize(f[y0:y0 + s, x0:x0 + s], (W, W), interpolation=cv2.INTER_AREA)
         mask = self._mask(f)
         lum = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
+        if self.scale != 1.0:  # shrink the subject, anchored bottom-centre so the body still meets the frame edge
+            M = cv2.getRotationMatrix2D((W / 2, W), 0, self.scale)
+            lum = cv2.warpAffine(lum, M, (W, W), borderValue=0)
+            mask = cv2.warpAffine(mask, M, (W, W), borderValue=0)
         self._still = (lum, mask, False)
         return self._still
 
@@ -120,7 +135,7 @@ def subject_for(shot):
     for ext in (".mp4", ".jpg"):
         p = os.path.join(FOOTAGE, shot["id"] + ext)
         if os.path.exists(p):
-            return Footage(p, shot["framing"])
+            return Footage(p, shot["framing"], shot.get("subject_scale", 1.0))
     return Placeholder(shot)
 
 
@@ -152,7 +167,7 @@ def outline(mask, k, width=6):
 STK = {k: sticker(k, 200) for k in ["phone", "phone_back", "bolt", "chip", "battery", "lens", "wifi", "cpu_badge"]}
 STRIPED = gfx.striped_phone(300)
 TITLE = gfx.text_layer([("ARUN", 1.0), ("the", 0.7), ("BOSS", 1.15)], "anton", 150, spacing=0.82)
-BADGE = gfx.text_layer([("WHO?", 1.0)], "silkscreen", 88, stroke=5)
+WATERMARK = gfx.watermark("MTD")
 
 
 def draw_rect_outline(dst, cx, cy, w, h, ang, thick=3, val=0.95):
@@ -169,8 +184,8 @@ def behind(shot, f, k, img):
         place(img, *STRIPED, 520 - k * 0.5, 470, 0.75, -24)
     if "icon_field" in o or "icon_orbit" in o:
         t = f / FPS
-        for i, (name, x, y, s) in enumerate([("phone_back", 420, 140, 0.55), ("bolt", 400, 400, 0.5),
-                                             ("chip", 110, 330, 0.5), ("battery", 150, 120, 0.4)]):
+        for i, (name, x, y, s) in enumerate([("phone_back", 430, 130, 1.35), ("bolt", 430, 430, 1.3),
+                                             ("chip", 120, 360, 1.2), ("battery", 130, 120, 1.0)]):
             ang = 20 * math.sin(t * 2 + i) - 25
             if "icon_orbit" in o:
                 x, y, s = 288 + 230 * math.cos(t * 1.6 + i * 1.57), 300 + 200 * math.sin(t * 1.6 + i * 1.57), s * 0.8
@@ -215,11 +230,16 @@ def front(shot, f, k, img):
         for side in (-1, 1):
             x = 288 + side * (520 - 340 * p) + side * 8 * math.sin(kk * 0.8)
             place(img, *STK["phone"], x, 300 + 30 * side, 1.3, side * 18 + kk * side * 0.6)
-    if "badge" in o and k < 14:
-        s = 0.5 + 0.5 * min(k / 2, 1)
-        fade = 1.0 if k < 10 else (14 - k) / 4
-        place(img, *STK["cpu_badge"], 288, 330, s * 0.9, 0, fade)
-        place(img, *BADGE, 288, 380, s, 0, fade)
+    if "badge" in o and k < 16:
+        # editor tag: pops in over 2 frames, holds, then breaks up into vertical strips
+        s = (0.55, 1.12, 1.0)[k] if k < 3 else 1.0
+        wl, wa = WATERMARK
+        if k >= 11:
+            keep = np.random.default_rng(k).random(wa.shape[1] // 3 + 1) > (k - 10) / 5.5
+            wa = wa * np.repeat(keep, 3)[:wa.shape[1]][None, :]
+            wl = wl * (0.4 + 0.6 * np.repeat(keep, 3)[:wa.shape[1]][None, :])
+        place(img, *STK["cpu_badge"], 288, 300, s * 0.75, 0, 1.0 if k < 11 else max(0, (15 - k) / 4))
+        place(img, wl, wa, 288, 340, s * 0.95, 0)
     if "tear" in o:
         tear(img, k)
     if "lens_zoom" in o and k >= n - 4:
@@ -272,61 +292,87 @@ def line_blur(img, length, ang):
     return cv2.filter2D(img, -1, k / k.sum(), borderType=cv2.BORDER_REFLECT)
 
 
-def zoom_blur(img, amount, steps=10):
+def zoom_blur(img, amount, steps=8, center=(W / 2, W / 2)):
+    if amount < 0.01:
+        return img
     acc = np.zeros_like(img)
     for i in range(steps):
-        acc += warp(img, 1 + amount * i / steps, 0, 0, 0)
+        acc += warp(img, 1 + amount * i / steps, 0, 0, 0, center)
     return acc / steps
 
 
-def transition_state(f):
-    """Returns (kind, intensity 0..1, angle, phase 'out'|'in') for frame f, or None."""
-    for c, kind, pre, post, ang in TRANSITIONS:
-        if c - pre <= f < c:
-            return kind, (f - (c - pre) + 1) / (pre + 0.5), ang, "out"
-        if c <= f < c + post:
-            return kind, 1 - (f - c) / (post + 0.3), ang, "in"
-    return None
+# Handheld motion: smooth low-passed noise whose amplitude kicks up on every music accent.
+_noise = cv2.GaussianBlur(np.random.default_rng(21).standard_normal((N_FRAMES + 8, 3)).astype(np.float32), (1, 0), 1.3)
+_noise /= _noise.std(0)
 
 
-def apply_transition(img, f):
-    st = transition_state(f)
-    if st is None:
+def shake(f, base):
+    kick = sum(math.exp(-(f - o) / 2.2) for o in ONSETS if 0 <= f - o < 8)
+    amp = base * (0.7 + 2.2 * kick)
+    n = _noise[f]
+    return amp * n[0], amp * n[1], 0.25 * amp * n[2]
+
+
+TR = {c: dict(kind=k, pre=pre, post=post, ang=ang) for c, k, pre, post, ang in TRANSITIONS}
+
+
+def move(img, tr, phase, d):
+    """Transition motion. d = 0 at rest .. 1 at the cut. 'out' leaves along +angle, 'in' arrives from -angle."""
+    if d <= 0.001:
         return img
-    kind, I, ang, phase = st
-    I = min(max(I, 0), 1)
+    kind, a = tr["kind"], math.radians(tr["ang"])
     sign = 1 if phase == "out" else -1
-    if kind.startswith("whip"):
-        a = math.radians(ang)
-        img = warp(img, 1 + 0.15 * I, 0, sign * 110 * I * math.cos(a), sign * 110 * I * math.sin(a))
-        img = line_blur(img, 8 + 95 * I, ang)
+    if kind in ("whip", "whip_flash", "lens"):
+        if kind == "lens":  # the sticker hides the cut, so the camera move underneath stays light
+            d *= 0.45
+        img = warp(img, 1 + 0.08 * d, sign * 3 * d, sign * 150 * d * math.cos(a), sign * 150 * d * math.sin(a))
+        img = line_blur(img, 62 * d, tr["ang"])
         if kind == "whip_flash":
-            img = img + 0.45 * I
+            img = img + 0.22 * d * d
     elif kind == "zoom":
-        img = warp(img, 1 + (0.5 if phase == "out" else 0.25) * I, 0, 0, 0)
-        img = zoom_blur(img, 0.35 * I)
+        img = warp(img, 1 + (0.45 if phase == "out" else 0.35) * d, 2 * sign * d, 0, 0)
+        img = zoom_blur(img, 0.2 * d)
     elif kind == "glitch":
         img = img.copy()
-        for _ in range(int(10 * I) + 3):
-            y = rng.integers(0, W - 40)
-            h, s = rng.integers(8, 60), int(rng.integers(-80, 80) * I)
+        r = np.random.default_rng(int(d * 1000))
+        for _ in range(int(12 * d) + 2):
+            y = r.integers(0, W - 40)
+            h, s = r.integers(6, 50), int(r.integers(-90, 90) * d)
             img[y:y + h] = np.roll(img[y:y + h], s, axis=1)
-        img = line_blur(img, 30 * I, 0)
+        img = line_blur(img, 26 * d, 0)
     return img
+
+
+LENS_MAX = 0.4 * 2.2 ** 3  # lens sticker scale on the last frame before the cut
+
+
+def lens_exit(img, d):
+    """Lens sticker that covered the previous cut flies off the incoming shot (d: 1 at the cut .. 0 gone)."""
+    if d < 0.02:
+        return img
+    l, a = STK["lens"]
+    tmp, al = np.zeros_like(img), np.zeros_like(img)
+    s = LENS_MAX * d + 1.5 * (1 - d)
+    x, y = 300 + 270 * (1 - d), 300 - 280 * (1 - d)
+    place(tmp, l, a, x, y, s, 140 - 40 * d)
+    place(al, np.ones_like(a), a, x, y, s, 140 - 40 * d)
+    tmp, al = line_blur(tmp, 50, -50), line_blur(al, 50, -50)
+    return img * (1 - al) + tmp
 
 
 # ---------------------------------------------------------------- frame assembly
 SRC = None
 
 
-def render_frame(shot, src, f):
+def shot_layer(shot, src, f):
+    """The shot's own picture at frame f with its camera move; f may run past either end of the shot."""
     global SRC
     SRC = src
-    k = f - shot["start"]
     n = shot["end"] - shot["start"]
-    t = k / max(n - 1, 1)
+    k = min(max(f - shot["start"], 0), n + 2)
+    t = min(k / max(n - 1, 1), 1)
     if src is not None:
-        lum, mask, is_ph = src.get(k)
+        lum, mask, is_ph = src.get(min(k, n - 1))
         sub = stylize(lum, shot["look"])
         bg_src = lum * (1 - mask) if not is_ph else None
     else:
@@ -345,18 +391,38 @@ def render_frame(shot, src, f):
 
     cam = shot["cam"]
     z = cam["z"][0] + (cam["z"][1] - cam["z"][0]) * ease(t)
+    z *= 1 + 0.07 * math.exp(-k / 2.0)  # punch-in on the beat the shot lands on
     rot = cam["rot"][0] + (cam["rot"][1] - cam["rot"][0]) * ease(t)
-    sx, sy = rng.normal(0, cam["shake"], 2)
-    center = (W / 2, W / 2)
+    sx, sy, sr = shake(f, cam["shake"])
     if "crash_zoom" in shot["overlays"] and k >= 13:
         kk = k - 12
-        z *= 1 + 0.45 * kk
         center = (360, 420) if isinstance(SRC, Placeholder) else tuple(shot.get("zoom_to", (280, 500)))
-        img = warp(img, z, rot, sx, sy, center)
-        img = zoom_blur(img, 0.12 * kk)
-    else:
-        img = warp(img, z, rot, sx, sy, center)
-    img = apply_transition(img, f)
+        img = warp(img, z * (1 + 0.13 * kk ** 1.25), rot + sr, sx, sy, center)
+        return zoom_blur(img, 0.012 * kk, center=center)
+    return warp(img, z, rot + sr, sx, sy)
+
+
+def render_frame(i, srcs, f):
+    shot = SHOTS[i]
+    c0, c1 = shot["start"], shot["end"]
+    t_in, t_out = TR[c0], TR.get(c1)
+    img = shot_layer(shot, srcs[i], f)
+    if t_in["post"] and f < c0 + t_in["post"]:  # arriving: decelerate out of the previous shot's motion
+        v = 1 - (f - c0 + 1) / (t_in["post"] + 1)
+        img = move(img, t_in, "in", v ** 2.2)
+        if t_in["kind"] == "lens":
+            img = lens_exit(img, v ** 3)
+        if f == c0 and i > 0 and TR[c0]["pre"]:  # 2-frame streaked overlap across the cut
+            prev = move(shot_layer(SHOTS[i - 1], srcs[i - 1], f), t_in, "out", 1.15)
+            img = 0.74 * img + 0.26 * prev
+    if t_out and t_out["pre"] and f >= c1 - t_out["pre"]:  # leaving: accelerate into the cut
+        u = (f - (c1 - t_out["pre"]) + 1) / t_out["pre"]
+        img = move(img, t_out, "out", u ** 2)
+        if f == c1 - 1 and i + 1 < len(SHOTS):
+            nxt = move(shot_layer(SHOTS[i + 1], srcs[i + 1], f), t_out, "in", 1.0)
+            if t_out["kind"] == "lens":
+                nxt = lens_exit(nxt, 1.0)
+            img = 0.72 * img + 0.28 * nxt
     return finish(img, f)
 
 
@@ -403,12 +469,12 @@ def main():
     enc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     if a.debug_frames:
         os.makedirs(a.debug_frames, exist_ok=True)
-    for shot in SHOTS:
-        src = subject_for(shot)
-        kind = "none" if src is None else type(src).__name__
+    srcs = [subject_for(s) for s in SHOTS]
+    for i, shot in enumerate(SHOTS):
+        kind = "none" if srcs[i] is None else type(srcs[i]).__name__
         print(f"{shot['id']} f{shot['start']}-{shot['end'] - 1} source={kind}", flush=True)
         for f in range(shot["start"], shot["end"]):
-            fr = render_frame(shot, src, f)
+            fr = render_frame(i, srcs, f)
             enc.stdin.write(fr.tobytes())
             if a.debug_frames:
                 cv2.imwrite(os.path.join(a.debug_frames, f"f{f:03d}.png"), fr)

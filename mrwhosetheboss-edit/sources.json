@@ -1,26 +1,26 @@
 {
   "S01": {
     "need": "Close-up, intense stare straight into lens (studio intro)",
-    "url": "https://www.youtube.com/watch?v=oaaOwLnuyPU",
+    "url": "https://www.youtube.com/watch?v=PjAyUhf52D0",
     "start": null,
-    "title": "Google Pixel 11 Hands on - The Phone Crisis Begins.",
-    "thumbnail": "https://i.ytimg.com/vi/oaaOwLnuyPU/maxresdefault.jpg",
+    "title": "iPhone 18 Pro Review - My Last iPhone?",
+    "thumbnail": "https://i.ytimg.com/vi/PjAyUhf52D0/maxresdefault.jpg",
     "crop": [
-      560,
+      0,
       0,
       720
     ]
   },
   "S02": {
     "need": "Extreme close-up of face, serious / unimpressed expression",
-    "url": "https://www.youtube.com/watch?v=VTLnDqjfRZQ",
+    "url": "https://www.youtube.com/watch?v=ObqHKHoSE5Y",
     "start": null,
-    "title": "I spent $12,000 on the THINNEST Tech",
-    "thumbnail": "https://i.ytimg.com/vi/VTLnDqjfRZQ/maxresdefault.jpg",
+    "title": "Samsung S26 Ultra Hands on - What's ACTUALLY New?",
+    "thumbnail": "https://i.ytimg.com/vi/ObqHKHoSE5Y/maxresdefault.jpg",
     "crop": [
-      360,
-      60,
-      600
+      560,
+      0,
+      720
     ]
   },
   "S03": {
@@ -61,12 +61,12 @@
   },
   "S07": {
     "need": "Close-up looking down at a phone / product in hand",
-    "url": "https://www.youtube.com/watch?v=Cr9B6yyLZSk",
+    "url": "https://www.youtube.com/watch?v=5t1okmz8Pyw",
     "start": null,
-    "title": "iPhone 17/Air/Pro Hands on - Everything’s changed",
-    "thumbnail": "https://i.ytimg.com/vi/Cr9B6yyLZSk/maxresdefault.jpg",
+    "title": "Samsung Z Flip 6 / Z Fold 6 Review - Don't make a mistake!",
+    "thumbnail": "https://i.ytimg.com/vi/5t1okmz8Pyw/maxresdefault.jpg",
     "crop": [
-      280,
+      240,
       0,
       720
     ]
@@ -121,12 +121,12 @@
   },
   "S12": {
     "need": "Holding a phone up to camera / comparing two phones",
-    "url": "https://www.youtube.com/watch?v=IYtDS27znnM",
+    "url": "https://www.youtube.com/watch?v=ULbJoCnARXc",
     "start": null,
-    "title": "iPhone 17 Pro vs Samsung S25 Ultra Camera Comparison!",
-    "thumbnail": "https://i.ytimg.com/vi/IYtDS27znnM/maxresdefault.jpg",
+    "title": "Google Pixel 9a vs iPhone 16e!",
+    "thumbnail": "https://i.ytimg.com/vi/ULbJoCnARXc/maxresdefault.jpg",
     "crop": [
-      280,
+      160,
       0,
       720
     ]
