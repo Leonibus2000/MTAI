@@ -3,6 +3,10 @@
   python3 fetch_footage.py scout <video-url> [--every 1.5]
       Downloads a 360p copy and writes scout/<id>.jpg, a timestamped contact sheet
       for picking moments.
+  python3 fetch_footage.py stills
+      For every slot in sources.json with a thumbnail and crop, downloads the official
+      video thumbnail and writes footage/<slot>.jpg (square crop). Fallback when video
+      downloads are refused; clips in footage/<slot>.mp4 take priority in render.py.
   python3 fetch_footage.py fetch
       For every slot in sources.json that has a url and start time, downloads only
       that section (yt-dlp --download-sections) and writes footage/<slot>.mp4, trimmed
@@ -61,10 +65,32 @@ def fetch():
         log.flush()
 
 
+def stills():
+    import cv2
+    import urllib.request
+    src = json.load(open(os.path.join(HERE, "sources.json")))
+    os.makedirs(FOOT, exist_ok=True)
+    log = open(os.path.join(FOOT, "SOURCES.log"), "a")
+    for sid, s in src.items():
+        if not s.get("thumbnail") or not s.get("crop"):
+            continue
+        raw = os.path.join(FOOT, f"{sid}_thumb.jpg")
+        urllib.request.urlretrieve(s["thumbnail"], raw)
+        img = cv2.imread(raw)
+        img = cv2.resize(img, (1280, 720), interpolation=cv2.INTER_CUBIC)
+        x0, y0, size = s["crop"]
+        cv2.imwrite(os.path.join(FOOT, f"{sid}.jpg"), img[y0:y0 + size, x0:x0 + size], [cv2.IMWRITE_JPEG_QUALITY, 95])
+        os.remove(raw)
+        log.write(f"{sid}\t{s['thumbnail']}\tthumbnail of {s['url']} ({s.get('title', '')})\tcrop x={x0} y={y0} size={size} @1280x720\n")
+        print(sid, "<-", s["thumbnail"])
+
+
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "scout":
         every = float(sys.argv[sys.argv.index("--every") + 1]) if "--every" in sys.argv else 1.5
         scout(sys.argv[2], every)
+    elif len(sys.argv) >= 2 and sys.argv[1] == "stills":
+        stills()
     elif len(sys.argv) >= 2 and sys.argv[1] == "fetch":
         fetch()
     else:

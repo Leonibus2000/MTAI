@@ -33,6 +33,13 @@ class Footage:
     CROP = {"ecu": (1.9, 0.05), "cu": (2.9, 0.35), "mcu": (4.0, 0.9), "ms": (5.6, 1.5)}
 
     def __init__(self, path, framing):
+        from rembg import new_session
+        self.seg = new_session("u2net_human_seg")
+        self._still = None
+        if path.endswith(".jpg"):  # pre-cropped square still: the camera moves supply the motion
+            f = cv2.imread(path)
+            self.frames, self.box = [f], (0, 0, min(f.shape[:2]))
+            return
         self.frames = []
         cap = cv2.VideoCapture(path)
         while True:
@@ -42,8 +49,6 @@ class Footage:
             self.frames.append(f)
         if not self.frames:
             raise RuntimeError(f"no frames in {path}")
-        from rembg import new_session
-        self.seg = new_session("u2net_human_seg")
         self.box = self._crop_box(self.frames[0], framing)
 
     def _mask(self, f):
@@ -73,12 +78,15 @@ class Footage:
         return x0, y0, s
 
     def get(self, k):
+        if len(self.frames) == 1 and self._still is not None:
+            return self._still
         f = self.frames[min(k, len(self.frames) - 1)]
         x0, y0, s = self.box
         f = cv2.resize(f[y0:y0 + s, x0:x0 + s], (W, W), interpolation=cv2.INTER_AREA)
         mask = self._mask(f)
         lum = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
-        return lum, mask, False
+        self._still = (lum, mask, False)
+        return self._still
 
 
 class Placeholder:
@@ -109,9 +117,10 @@ class Placeholder:
 def subject_for(shot):
     if shot["framing"] is None:
         return None
-    p = os.path.join(FOOTAGE, f"{shot['id']}.mp4")
-    if os.path.exists(p):
-        return Footage(p, shot["framing"])
+    for ext in (".mp4", ".jpg"):
+        p = os.path.join(FOOTAGE, shot["id"] + ext)
+        if os.path.exists(p):
+            return Footage(p, shot["framing"])
     return Placeholder(shot)
 
 
@@ -216,9 +225,9 @@ def front(shot, f, k, img):
     if "lens_zoom" in o and k >= n - 4:
         kk = k - (n - 4)
         place(img, *STK["lens"], 300, 300, 0.4 * (2.2 ** kk), 40 + kk * 25)
-    if "crash_zoom" in o:  # device on the desk that the camera crash-zooms into
+    if "crash_zoom" in o and isinstance(SRC, Placeholder):  # give the crash zoom a device to land on
         place(img, *STK["phone_back"], 360, 430, 0.8, 70)
-    if "held_phone" in o:
+    if "held_phone" in o and isinstance(SRC, Placeholder):
         place(img, *STK["phone_back"], 430, 430, 0.75, -12 + 4 * math.sin(k * 0.5))
 
 
@@ -307,7 +316,12 @@ def apply_transition(img, f):
 
 
 # ---------------------------------------------------------------- frame assembly
+SRC = None
+
+
 def render_frame(shot, src, f):
+    global SRC
+    SRC = src
     k = f - shot["start"]
     n = shot["end"] - shot["start"]
     t = k / max(n - 1, 1)
@@ -337,7 +351,7 @@ def render_frame(shot, src, f):
     if "crash_zoom" in shot["overlays"] and k >= 13:
         kk = k - 12
         z *= 1 + 0.45 * kk
-        center = (360, 420)
+        center = (360, 420) if isinstance(SRC, Placeholder) else tuple(shot.get("zoom_to", (280, 500)))
         img = warp(img, z, rot, sx, sy, center)
         img = zoom_blur(img, 0.12 * kk)
     else:

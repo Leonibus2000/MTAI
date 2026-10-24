@@ -1,67 +1,158 @@
 {
   "S01": {
     "need": "Close-up, intense stare straight into lens (studio intro)",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=oaaOwLnuyPU",
+    "start": null,
+    "title": "Google Pixel 11 Hands on - The Phone Crisis Begins.",
+    "thumbnail": "https://i.ytimg.com/vi/oaaOwLnuyPU/maxresdefault.jpg",
+    "crop": [
+      560,
+      0,
+      720
+    ]
   },
   "S02": {
     "need": "Extreme close-up of face, serious / unimpressed expression",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=VTLnDqjfRZQ",
+    "start": null,
+    "title": "I spent $12,000 on the THINNEST Tech",
+    "thumbnail": "https://i.ytimg.com/vi/VTLnDqjfRZQ/maxresdefault.jpg",
+    "crop": [
+      360,
+      60,
+      600
+    ]
   },
   "S03": {
     "need": "Medium shot, pointing a finger / gesturing at camera",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=lE_11_paGoA",
+    "start": null,
+    "title": "I Escaped the Apple Ecosystem - It Backfired",
+    "thumbnail": "https://i.ytimg.com/vi/lE_11_paGoA/maxresdefault.jpg",
+    "crop": [
+      520,
+      0,
+      720
+    ]
   },
   "S04": {
     "need": "Thinking pose, hand on chin, looking off-camera",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=YUvf1OILS1I",
+    "start": null,
+    "title": "WWDC 2025 - Rating every new Apple Software!",
+    "thumbnail": "https://i.ytimg.com/vi/YUvf1OILS1I/maxresdefault.jpg",
+    "crop": [
+      330,
+      0,
+      640
+    ]
   },
   "S05": {
     "need": "Hand over mouth / leaning in, mid close-up",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=nQdXp6HKKik",
+    "start": null,
+    "title": "I tested the most Futuristic Tech - it scared me.",
+    "thumbnail": "https://i.ytimg.com/vi/nQdXp6HKKik/maxresdefault.jpg",
+    "crop": [
+      480,
+      0,
+      420
+    ]
   },
   "S07": {
     "need": "Close-up looking down at a phone / product in hand",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=Cr9B6yyLZSk",
+    "start": null,
+    "title": "iPhone 17/Air/Pro Hands on - Everything’s changed",
+    "thumbnail": "https://i.ytimg.com/vi/Cr9B6yyLZSk/maxresdefault.jpg",
+    "crop": [
+      280,
+      0,
+      720
+    ]
   },
   "S08": {
     "need": "Profile / three-quarter, looking up, finger on chin",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=E1BeAUHnLIg",
+    "start": null,
+    "title": "I Investigated IKEA’s Suspiciously Cheap Tech",
+    "thumbnail": "https://i.ytimg.com/vi/E1BeAUHnLIg/maxresdefault.jpg",
+    "crop": [
+      420,
+      60,
+      640
+    ]
   },
   "S09": {
     "need": "Hands clasped under chin, focused stare",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=oMmpC1tef4c",
+    "start": null,
+    "title": "I Investigated the Most Expensive Phone Brand",
+    "thumbnail": "https://i.ytimg.com/vi/oMmpC1tef4c/maxresdefault.jpg",
+    "crop": [
+      0,
+      40,
+      620
+    ]
   },
   "S10": {
     "need": "Close-up reaction, shocked / surprised face",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=Eo5w2S-h5dI",
+    "start": null,
+    "title": "The Gaming Market is Starting to Break.",
+    "thumbnail": "https://i.ytimg.com/vi/Eo5w2S-h5dI/maxresdefault.jpg",
+    "crop": [
+      60,
+      60,
+      600
+    ]
   },
   "S11": {
     "need": "At desk with phones / unboxing, looking at a device",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=tlGdNOtdVoU",
+    "start": null,
+    "title": "I tested every new 2025 Samsung product!",
+    "thumbnail": "https://i.ytimg.com/vi/tlGdNOtdVoU/maxresdefault.jpg",
+    "crop": [
+      40,
+      20,
+      640
+    ]
   },
   "S12": {
     "need": "Holding a phone up to camera / comparing two phones",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=IYtDS27znnM",
+    "start": null,
+    "title": "iPhone 17 Pro vs Samsung S25 Ultra Camera Comparison!",
+    "thumbnail": "https://i.ytimg.com/vi/IYtDS27znnM/maxresdefault.jpg",
+    "crop": [
+      280,
+      0,
+      720
+    ]
   },
   "S13": {
     "need": "Big genuine smile / laugh, close-up",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=ShJw2I8cgBE",
+    "start": null,
+    "title": "Samsung S25 Ultra Hands On - The New Era",
+    "thumbnail": "https://i.ytimg.com/vi/ShJw2I8cgBE/maxresdefault.jpg",
+    "crop": [
+      290,
+      0,
+      600
+    ]
   },
   "S14": {
     "need": "Outro: holding a product, phone wall behind",
-    "url": "",
-    "start": null
+    "url": "https://www.youtube.com/watch?v=6jVUSsByq9Y",
+    "start": null,
+    "title": "The BEST Smartphones of 2024!",
+    "thumbnail": "https://i.ytimg.com/vi/6jVUSsByq9Y/maxresdefault.jpg",
+    "crop": [
+      280,
+      0,
+      720
+    ]
   }
 }
