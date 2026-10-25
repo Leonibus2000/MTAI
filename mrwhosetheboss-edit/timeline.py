@@ -107,7 +107,8 @@ for i, s in enumerate(SHOTS):
 #   push = arrival zoom-in that settles (amount, time constant T), pull = starts zoomed in and backs out
 #   shake = jitter burst (px) fired at the cut, flash = white lift, overlap = 2-frame streaked blend
 #   wipe = next shot smeared in from the right before the cut (cover fraction and smear px per frame)
-#   comp = a designed transition from transitions.py instead of a camera move (pre/post frames around the cut)
+#   comp = a designed transition from transitions.py instead of a camera move (pre/post frames around the cut,
+#          shutter = motion-blur exposure in frames, 0.8 unless set)
 #   smear_in = per-frame horizontal smear / echo / darkening of the new shot's first frames
 CUTS = {
     # Where the edit departs from the reference: designed transitions (transitions.py) replace its most
@@ -125,12 +126,14 @@ CUTS = {
              smear_in={0: dict(blur=22, echo=(40, 0.45)), 1: dict(blur=48, echo=(56, 0.4), dark=0.72),
                        2: dict(blur=14, echo=(26, 0.35))},
              arrive=[("push", dict(amount=0.03, T=4))], shake=10),
-    101: dict(comp=dict(type="crt", pre=3, post=3), shake=6),
+    # the title shot closes like an app into the 9V icon of the interlude, which plays the home screen
+    101: dict(comp=dict(type="app_close", pre=2, post=4, icon=0, shutter=0.55), shake=6),
     # dive into the screen of the iPhone at the left edge of the interlude, where the MTD shot is playing
     132: dict(comp=dict(type="portal", pre=5, fly=0), arrive=[("push", dict(amount=0.08, T=3))], shake=8),
     149: dict(exit=[("whip", dict(frames=2, angle=40, dist=90)), ("spin", dict(frames=2, deg=-3))],
               arrive=[("whip", dict(frames=2, angle=40, dist=45))], shake=12),
-    169: dict(comp=dict(type="mosaic", pre=3, post=3), shake=8),
+    # the next Arun rises in front as a sticker while the profile shot racks out of focus; lands on the hit
+    169: dict(comp=dict(type="pop_in", pre=3, post=2, shutter=0.35), shake=14),
     182: dict(exit=[("zoom", dict(frames=4, amount=0.40)), ("spin", dict(frames=4, deg=7))],
               arrive=[("push", dict(amount=0.32, T=4))], shake=14),
     200: dict(comp=dict(type="phone_wipe", pre=3, post=3, phone="phone_galaxy_s7_front", scale=1.6, lean=14),

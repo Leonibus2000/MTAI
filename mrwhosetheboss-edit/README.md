@@ -3,7 +3,7 @@
 Output: 576×576, 30 fps, 8.73 s MP4 (262 frames = 16 beats) that loops: the last shot opens into the first through a Dynamic Island and the music carries across the seam, so it can play on repeat. Black-and-white posterize/halftone look, white cut-out outlines,
 whip/zoom/glitch transitions on the music accents, film grain, pixel/Anton typography and
 real product photos as stickers. Six of the cuts use designed tech transitions (`transitions.py`): a Dynamic Island
-expand, sliding slats, a CRT switch-off, a dive into a phone screen, a pixel mosaic and a real-phone wipe.
+expand, sliding slats, an iOS app close, a dive into a phone screen, a sticker pop-in and a real-phone wipe.
 `EDIT_TIMELINE.md` has the full shot-by-shot breakdown.
 
 ## Status

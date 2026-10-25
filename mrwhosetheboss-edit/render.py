@@ -220,6 +220,17 @@ FLY = [("phone_iphone12pro_standing", -1, 330, 1.3, -12), ("phone_galaxy_s7_fron
 FLANK = [("battery_powerbank_silver", 122, 330, 0.36, 24), ("battery_duracell_aa_vertical", 462, 330, 0.34, -18)]
 
 
+def float_pose(i, f, k, n):
+    """Pose (x, y, scale, angle) of interlude battery i at frame f (k frames into the n-frame shot): drifts,
+    sways, then pulls back toward the middle once the phones arrive."""
+    name, (xa, ya), (xb, yb), s, (aa, ab) = FLOAT[i]
+    shrink = ease((f - FLY_AT) / 6)
+    q = k / max(n - 1, 1)
+    x, y = xa + (xb - xa) * q, ya + (yb - ya) * q
+    x, y = x + (288 - x) * 0.35 * shrink, y + (300 - y) * 0.3 * shrink
+    return x + 6 * math.sin(f * 0.21 + i), y + 5 * math.cos(f * 0.17 + i), s * (1 - 0.38 * shrink), aa + (ab - aa) * q
+
+
 def fly_pose(idx, t):
     """Pose (x, y, scale, angle, opacity) of interlude phone `idx` at time t: whips in from the side over
     2.5 frames, then holds at the frame edge with a slight sway."""
@@ -253,14 +264,8 @@ def behind(shot, f, k, img):
         place(img, *STRIPED, 470 + k * 0.8, 190, 0.95, -18)
         place(img, *STRIPED, 520 - k * 0.5, 470, 0.75, -24)
     if "icon_field" in o:
-        n = shot["end"] - shot["start"]
-        shrink = ease((f - FLY_AT) / 6)  # once the phones arrive the batteries pull back toward the middle
-        for i, (name, (xa, ya), (xb, yb), s, (aa, ab)) in enumerate(FLOAT):
-            q = k / max(n - 1, 1)
-            x, y = xa + (xb - xa) * q, ya + (yb - ya) * q
-            x, y = x + (288 - x) * 0.35 * shrink, y + (300 - y) * 0.3 * shrink
-            props.draw(img, name, x + 6 * math.sin(f * 0.21 + i), y + 5 * math.cos(f * 0.17 + i),
-                       s * (1 - 0.38 * shrink), aa + (ab - aa) * q, soft=1.1)
+        for i, (name, *_) in enumerate(FLOAT):
+            props.draw(img, name, *float_pose(i, f, k, shot["end"] - shot["start"]), soft=1.1)
 
     if "pixel_stairs" in o:
         for side in (0, 1):
@@ -482,11 +487,19 @@ def neighbour(j, srcs, f):
     return photograph(j, srcs, f)
 
 
-def designed(comp, a, b, f, c, j_out):
+def subject_matte(i, srcs, f):
+    """Shot i's subject matte, as an alpha in frame coordinates at frame f."""
+    shot = SHOTS[i]
+    k = min(max(f - shot["start"], 0), shot["end"] - shot["start"] - 1)
+    cam = camera.matrix(camera.state(i, f))
+    return cv2.warpAffine(srcs[i].get(k)[1], cam, (W, W), flags=cv2.INTER_LINEAR, borderValue=0)
+
+
+def designed(comp, a, b, f, c, j_out, srcs):
     """One of the designed transitions (transitions.py) at frame f of the cut at frame c."""
     pre, post = comp["pre"], comp.get("post", 0)
     p = (f - (c - pre) + 0.5) / (pre + post)
-    dp = 0.8 / (pre + post)  # shutter, as a fraction of the transition
+    dp = comp.get("shutter", 0.8) / (pre + post)  # shutter (frames), as a fraction of the transition
     kind = comp["type"]
     if kind == "portal":
         x, y, s, ang, _ = fly_pose(comp["fly"], f)
@@ -494,8 +507,16 @@ def designed(comp, a, b, f, c, j_out):
         return transitions.portal(a, b, f, c, pre, FLY[comp["fly"]][0], (x, y, s, ang), cam)
     if kind == "phone_wipe":
         return transitions.phone_wipe(a, b, p, dp, f, c, pre, post, comp["phone"], comp["scale"], comp["lean"])
-    if kind == "mosaic":
-        return transitions.mosaic(a, b, p)
+    if kind == "pop_in":
+        return transitions.pop_in(a, b, p, dp, subject_matte((j_out + 1) % len(SHOTS), srcs, f))
+    if kind == "app_close":  # the card lands on an icon of the incoming shot, found through its camera
+        j_in = (j_out + 1) % len(SHOTS)
+        shot = SHOTS[j_in]
+        x, y, s, _ = float_pose(comp["icon"], f, max(f - shot["start"], 0), shot["end"] - shot["start"])
+        cam = camera.matrix(camera.state(j_in, f))
+        tx, ty = cam @ np.array([x, y, 1.0])
+        icon_w = props.load(FLOAT[comp["icon"]][0])[1].shape[1] * s * math.hypot(cam[0, 0], cam[0, 1])
+        return transitions.app_close(a, b, p, dp, (tx, ty), icon_w)
     return getattr(transitions, kind)(a, b, p, dp)
 
 
@@ -504,9 +525,9 @@ def render_frame(i, srcs, f):
     c0, c1 = shot["start"], shot["end"]
     into, out_of = CUTS[c0], CUTS[c1]
     if "comp" in out_of and f >= c1 - out_of["comp"]["pre"]:
-        return finish(designed(out_of["comp"], photograph(i, srcs, f), neighbour(i + 1, srcs, f), f, c1, i), f)
+        return finish(designed(out_of["comp"], photograph(i, srcs, f), neighbour(i + 1, srcs, f), f, c1, i, srcs), f)
     if "comp" in into and f < c0 + into["comp"].get("post", 0):
-        return finish(designed(into["comp"], neighbour(i - 1, srcs, f), photograph(i, srcs, f), f, c0, i - 1), f)
+        return finish(designed(into["comp"], neighbour(i - 1, srcs, f), photograph(i, srcs, f), f, c0, i - 1, srcs), f)
     img = photograph(i, srcs, f)
     # two-frame overlap across motion cuts: both shots streaking at once hides the splice
     if f == c0 and into.get("exit") and into.get("overlap", True):

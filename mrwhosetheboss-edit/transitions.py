@@ -129,71 +129,92 @@ def strips(a, b, p, dp, n=6, stagger=0.1, span=0.45):
     return out * (1 - lines * o) + 0.96 * lines * o
 
 
-# ---------------------------------------------------------------- crt: TV switch-off / switch-on
-def _squeeze(img, sx, sy):
-    w, h = max(1, int(round(W * sx))), max(1, int(round(W * sy)))
-    small = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA if (sx < 1 or sy < 1) else cv2.INTER_LINEAR)
-    out = np.zeros((W, W), np.float32)
-    x0, y0 = (W - w) // 2, (W - h) // 2
-    sx0, sy0 = max(0, -x0), max(0, -y0)
-    dx0, dy0 = max(0, x0), max(0, y0)
-    cw, ch = min(w - sx0, W - dx0), min(h - sy0, W - dy0)
-    out[dy0:dy0 + ch, dx0:dx0 + cw] = small[sy0:sy0 + ch, sx0:sx0 + cw]
-    return out
+# ---------------------------------------------------------------- app close: iOS swipe-up into an icon
+def _app_geom(q, target, icon_w):
+    """(cx, cy, half size, corner radius, opacity) of the closing app card."""
+    lift = W / 2 - 34
+    if q < 0.3:   # picked up: shrinks a little and lifts, like the swipe-up gesture
+        e = _ease_out(q / 0.3)
+        s, cx, cy, r = 1 - 0.14 * e, W / 2, W / 2 - 34 * e, 40 * e
+    else:         # flies into its icon on the home screen, shrinking to the icon's size
+        e = _smooth((q - 0.3) / 0.7)
+        s = 0.86 * (icon_w / W / 0.86) ** e
+        cx, cy = W / 2 + (target[0] - W / 2) * e, lift + (target[1] - lift) * e
+        r = 40 * s / 0.86
+    return cx, cy, s * W / 2, r, 1 - _clip((q - 0.78) / 0.22)
 
 
-def crt(a, b, p, dp):
-    """The old shot collapses into a bright line like a switched-off CRT; the next one powers on
-    from a line, overshoots and settles, with scanlines while it warms up."""
+def app_close(a, b, p, dp, target, icon_w):
+    """The shot closes like an iPhone app: it shrinks into a rounded card, lifts, then flies into one of
+    the icons on the next shot (the dark interlude's batteries play the home screen), which springs
+    back into place behind it."""
+    def travel(q0, q1):
+        g0, g1 = _app_geom(q0, target, icon_w), _app_geom(q1, target, icon_w)
+        return abs(g1[0] - g0[0]) + abs(g1[1] - g0[1]) + abs(g1[2] - g0[2])
+
     def at(q):
-        if q < 0.5:
-            t = q / 0.5
-            src = a
-            sy = np.interp(t, [0, .17, .5, .83, 1], [1, .55, .12, .012, .004])
-            sx = np.interp(t, [0, .6, .83, 1], [1, 1, .55, .2])
-            g = np.interp(t, [0, .17, .5, .83, 1], [1, 1.3, 2.2, 4.0, 4.0])
-        else:
-            t = (q - 0.5) / 0.5
-            src = b
-            sy = np.interp(t, [0, .17, .5, .83, 1], [.004, .012, .3, 1.04, 1.0])
-            sx = np.interp(t, [0, .17, .4, 1], [.3, .7, 1, 1])
-            g = np.interp(t, [0, .17, .5, .83, 1], [4, 3.0, 1.7, 1.15, 1])
-        pic = _squeeze(src, sx, sy) * g
-        glow = cv2.GaussianBlur(pic, (0, 0), sigmaX=18 if sy < 0.05 else 8, sigmaY=3 if sy < 0.05 else 8)
-        out = pic + 1.0 * glow
-        if sy < 0.98 or q >= 0.5 and t < 0.9:
-            out = out * np.where(np.arange(W)[:, None] % 3 == 0, 0.72, 1.0)
-        flare = math.exp(-((q - 0.5) / 0.09) ** 2)  # white flare at the centre when the picture is a line
-        if flare > 0.02:
-            out = out + flare * np.exp(-(((_XX - W / 2) / (60 + 200 * flare)) ** 2 + ((_YY - W / 2) / 6) ** 2))
-        return out
-    return _shutter(at, p, dp, n=5)
+        cx, cy, hw, r, op = _app_geom(q, target, icon_w)
+        zb = 1.08 - 0.08 * _ease_out(q)  # home screen springs back from slightly zoomed in
+        home = cv2.warpAffine(b, cv2.getRotationMatrix2D((W / 2, W / 2), 0, zb), (W, W), borderMode=cv2.BORDER_REFLECT)
+        home = home * (0.55 + 0.45 * _ease_out(q))
+        size = max(2, int(round(2 * hw)))
+        small = cv2.resize(a, (size, size), interpolation=cv2.INTER_AREA)
+        M = np.float32([[2 * hw / size, 0, cx - hw], [0, 2 * hw / size, cy - hw]])
+        card = cv2.warpAffine(small, M, (W, W), flags=cv2.INTER_LINEAR, borderValue=0)
+        m = _fill(rounded_box(cx, cy, hw, hw, r)) * op
+        shadow = cv2.GaussianBlur(m, (0, 0), 12)
+        return home * (1 - 0.5 * shadow) * (1 - m) + card * m
+    out = _shutter(at, p, dp, travel=travel)
+    cx, cy, hw, r, op = _app_geom(p, target, icon_w)
+    k = _keyline(rounded_box(cx, cy, hw, hw, r)) * op / (1 + travel(p - dp / 2, p + dp / 2) / 40)
+    return out * (1 - k) + 0.96 * k
 
 
-# ---------------------------------------------------------------- mosaic: pixelate through blocks
-_NOISE = np.random.default_rng(7).random((2, 96, 96)).astype(np.float32)
+# ---------------------------------------------------------------- pop-in: the next subject rises in front
+def pop_in(a, b, p, dp, mask, land=0.56, snap=0.04, rise=300, size=0.7, pad=24):
+    """The next shot's subject pops up from the bottom as a white-bordered cut-out sticker, in front of
+    the old shot, which racks out of focus and dims behind it. On the cut it snaps up to full size and
+    its own background slams in with a white flash (the camera jolt is the cut's shake burst).
 
+    mask: the next shot's subject, as an alpha in frame coordinates."""
+    if p >= land + snap:
+        return b + 0.35 * math.exp(-(p - land - snap) / 0.12)
+    # sticker on a padded canvas, so the white border also runs along edges where the frame cuts him
+    m = cv2.copyMakeBorder(mask, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
+    ring = np.clip(cv2.GaussianBlur(cv2.dilate((m > 0.5).astype(np.float32), cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (15, 15))), (0, 0), 0.8), 0, 1)
+    lum = cv2.copyMakeBorder(b, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
+    sticker = np.where(ring > m, 0.96, lum)  # white border outside him, the shot inside
+    S = W + 2 * pad
 
-def mosaic(a, b, p, bmax=48):
-    """Both shots break into big pixel blocks; the blocks flip to the next shot in a scattered order,
-    with LED-style gaps between them, then resolve back to full resolution."""
-    bs = int(round(1 + (bmax - 1) * (1 - abs(2 * p - 1)) ** 1.5))
-    if bs <= 1:
-        return a if p < 0.5 else b
-    n = math.ceil(W / bs)
-    sa = cv2.resize(a, (n, n), interpolation=cv2.INTER_AREA)
-    sb = cv2.resize(b, (n, n), interpolation=cv2.INTER_AREA)
-    th = 0.5 + (cv2.resize(_NOISE[0], (n, n), interpolation=cv2.INTER_NEAREST) - 0.5) * 0.36
-    small = np.where(p > th, sb, sa)
-    if bs >= 8:
-        small = np.round(small * 7) / 7
-        spark = cv2.resize(_NOISE[1], (n, n), interpolation=cv2.INTER_NEAREST) > 0.93
-        small = np.where(spark, np.clip(small + 0.25 * math.sin(math.pi * p), 0, 1), small)
-    big = cv2.resize(small, (n * bs, n * bs), interpolation=cv2.INTER_NEAREST)[:W, :W]
-    if bs >= 10:
-        grid = ((np.arange(W) % bs) == 0)
-        big = big * np.where(grid[:, None] | grid[None, :], 0.45, 1.0)
-    return big
+    def T(q):
+        if q < land:  # rises from below, slowing as it reaches its spot
+            e = 1 - (1 - _clip(q / land)) ** 2
+            s, dy, rot = size * (0.86 + 0.14 * e), rise * (1 - e), 5 * (1 - e)
+        else:         # snaps up to full size on the cut
+            e = _clip((q - land) / snap) ** 2
+            s, dy, rot = size + (1 - size) * e, 0.0, 0.0
+        M = cv2.getRotationMatrix2D((S / 2, S - pad), rot, s)  # canvas bottom-centre -> frame bottom-centre
+        M[0, 2] += W / 2 - S / 2
+        M[1, 2] += W - (S - pad) + dy
+        return M, _clip(q / land)
+
+    def travel(q0, q1):
+        pts = np.array([[0, 0, 1], [S, 0, 1], [S / 2, S / 2, 1]], np.float32).T
+        return float(np.abs(T(q1)[0] @ pts - T(q0)[0] @ pts).max())
+
+    def at(q):
+        M, e = T(q)
+        back = cv2.GaussianBlur(a, (0, 0), 0.3 + 4 * e) * (1 - 0.45 * e)  # rack focus to the new subject
+        Ms = M.copy()
+        Ms[0, 2] += 10
+        Ms[1, 2] += 18
+        shadow = cv2.GaussianBlur(cv2.warpAffine(ring, Ms, (W, W), borderValue=0), (0, 0), 12)
+        back = back * (1 - 0.55 * shadow)
+        al = cv2.warpAffine(ring, M, (W, W), flags=cv2.INTER_LINEAR, borderValue=0)
+        fg = cv2.warpAffine(sticker * ring, M, (W, W), flags=cv2.INTER_LINEAR, borderValue=0)
+        return back * (1 - al) + fg
+    return _shutter(at, p, dp, travel=travel, step=3.0)
 
 
 # ---------------------------------------------------------------- phone wipe: a real phone sweeps across
