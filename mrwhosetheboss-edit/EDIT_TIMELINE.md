@@ -48,9 +48,9 @@ The reference's real cut here is at frame 70, not 73 (frame-difference detection
 | 72 | Lighter smear, title visible | 14 px smear + 26 px echo, title on |
 | 73 | Crisp, title off | crisp, title off |
 | 74–79 | 'HIKARU / the' with a glitch on the lettering, then static | 'ARUN / the' with sliced rows and a horizontal ghost on f74, then static |
-| 80–82 | 'GREAT' appears (off on 81) as the camera pushes in | 'BOSS' pops in (off on 81) as the camera zooms toward the title |
+| 80–82 | 'GREAT' appears (off on 81) as the camera pushes in | 'BOSS' pops in (off on 81) as the camera pushes in |
 | 83–84 | Two heavily streaked frames | 2-frame `jolt` (55, −25 px out and back) |
-| 85–100 | Tight hold on the title + face; stickers slam in at the edges on f89 | Held zoom ×1.27; phone, bolt and battery stickers pop in at the frame edges on f89 (screen-space, so the zoom doesn't push them off) |
+| 85–100 | Tight hold on the title + face; stickers slam in at the edges on f89 | Zoom ×1.27 pivoting between the title and his face so both stay in frame; real photos of an iPhone 12 Pro, a Duracell AA and a power bank fly in at the frame edges on f89 (screen space, after the exposure curve so they stay bright like the reference's stickers) |
 
 ## Loop
 
@@ -78,7 +78,7 @@ The reference's real cut here is at frame 70, not 73 (frame-difference detection
 
 ## Typography
 
-- S05 title: 'ARUN / the' (replaces 'HIKARU the') is on screen from the cut and flickers with the glitch frames. 'BOSS' (replaces 'GREAT') lands on f80 with the zoom. Anton, in front of the subject, with the first letter clipped by the frame edge like the reference's 'HIKARU'.
+- S05 title: 'ARUN / the' (replaces 'HIKARU the') is on screen from the cut and flickers with the glitch frames. 'BOSS' (replaces 'GREAT') lands on f80 with the zoom. As in the reference, it's bold pixel type (Pixelify Sans Bold) with an LED-dot texture and a soft glow, sitting **behind** him on a real circuit-board photo: he's moved right of centre (`subject_offset`) and covers the edge of the last letters, like Hikaru covers the 'U' of HIKARU.
 - S07 editor watermark: **MTD** (replaces the reference's 'MUHMA' tag). Tall VT323 pixel lettering, white with a black keyline and inner black hairlines, on a white die-cut badge. It pops in over frames 0–2, holds, then breaks up into vertical strips on frames 11–15.
 - S09 wall: repeated 'TECH' in Anton, scrolling (replaces 'GENIUS').
 
@@ -87,8 +87,8 @@ The reference's real cut here is at frame 70, not 73 (frame-difference detection
 | Reference | Recreation |
 |---|---|
 | Striped rook graphics | Striped phone silhouettes |
-| Rocket / bolt / stopwatch stickers | Phone-back, lightning bolt, AI chip, battery, Wi-Fi stickers |
-| Hands flying in | Two phones flying in |
+| Rocket / bolt / stopwatch stickers | Real photos (CC BY / CC0, see CREDITS.md) of a Galaxy S6 Edge and an iPhone 12 Pro, and of batteries: Duracell AA / AAA / 9V, a 2 Ah LiPo cell and a Xiaomi power bank. All are cut out with BiRefNet as black-and-white die-cut stickers with a soft shadow (`props.py`) |
+| Hands flying in | Two real phones (iPhone 12 Pro, Galaxy S21) whip in from the sides with motion blur and hold at the frame edges |
 | Checkerboard backgrounds | Rounded app-icon grid |
 | Chessboard / chess-piece walls | Wall of phone backs, PCB circuit traces |
 | Magnifier sticker zoom-through | Camera-lens sticker zoom-through |

@@ -133,6 +133,30 @@ def text_layer(lines, fontname, size, spacing=0.9, fill=1.0, stroke=0):
     return np.asarray(img, np.float32) / 255, np.asarray(a, np.float32) / 255
 
 
+def glow_title(lines, fontname="pixelify-sans", weight=700, size=120, spacing=0.92):
+    """Title lettering like the reference's 'HIKARU the GREAT': bold pixel type, bright white with a fine dot
+    texture and a soft bloom. Returns (lum, alpha) with the glow included in the alpha."""
+    path = os.path.join(FONT_DIR, f"{fontname}-latin-{weight}-normal.ttf")
+    fonts = [ImageFont.truetype(path, int(size * s)) for _, s in lines]
+    widths = [f.getbbox(t)[2] for (t, _), f in zip(lines, fonts)]
+    pad = 24
+    H = int(sum(size * s * spacing for _, s in lines) + size * 0.4) + 2 * pad
+    Wd = max(widths) + 2 * pad
+    img = Image.new("L", (Wd, H), 0)
+    d = ImageDraw.Draw(img)
+    y = pad
+    for (t, s), f in zip(lines, fonts):
+        d.text((pad, y), t, font=f, fill=255)
+        y += int(size * s * spacing)
+    a = np.asarray(img, np.float32) / 255
+    yy, xx = np.mgrid[0:H, 0:Wd]
+    dots = 0.82 + 0.18 * ((xx % 4 < 3) & (yy % 4 < 3))  # LED-like dot texture inside the letters
+    glow = cv2.GaussianBlur(a, (0, 0), 7) * 0.55 + cv2.GaussianBlur(a, (0, 0), 2.5) * 0.35
+    alpha = np.clip(np.maximum(a, glow), 0, 1)
+    lum = np.where(a > 0.05, 0.97 * dots, 0.85)
+    return lum.astype(np.float32), alpha.astype(np.float32)
+
+
 def watermark(text):
     """Tall, thin pixel lettering, white with a black keyline (styled after the reference's editor tag)."""
     f = font("vt323", 120)
@@ -217,6 +241,16 @@ def background(kind, k, src_bg):
         return np.maximum(base * 0.7, s * 0.55)
     if kind == "circuit":
         return np.maximum(base * 0.8, circuit_texture() * 0.9)
+    if kind == "pcb_photo":  # real circuit-board macro (props/plate_pcb_macro.jpg), dim, slowly drifting
+        if kind not in _cache:
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "props", "plate_pcb_macro.jpg")
+            g = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
+            s = min(g.shape)
+            g = g[(g.shape[0] - s) // 2:(g.shape[0] + s) // 2, (g.shape[1] - s) // 2:(g.shape[1] + s) // 2]
+            g = cv2.resize(g, (W + 80, W + 80), interpolation=cv2.INTER_AREA)
+            _cache[kind] = np.clip((g - g.mean()) * 1.5 + 0.5, 0, 1) * 0.5
+        d = int(k * 1.2)
+        return _cache[kind][40 - d // 3:40 - d // 3 + W, 20 + d:20 + d + W]
     if kind == "dark":
         n = cv2.GaussianBlur(_rng.random((W // 8, W // 8)).astype(np.float32), (0, 0), 2)
         return 0.12 + 0.12 * cv2.resize(n, (W, W))

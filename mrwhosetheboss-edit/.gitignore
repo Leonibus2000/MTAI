@@ -2,3 +2,4 @@ footage/
 scout/
 *.mp4
 __pycache__/
+props/

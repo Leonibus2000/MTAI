@@ -20,6 +20,7 @@ from PIL import Image, ImageDraw
 import camera
 import cutout
 import gfx
+import props
 from gfx import W, place, sticker
 from timeline import CUTS, FPS, N_FRAMES, SHOTS
 
@@ -43,8 +44,9 @@ def seg_session():
 class Footage:
     CROP = {"ecu": (1.9, 0.05), "cu": (2.9, 0.35), "mcu": (4.0, 0.9), "ms": (5.6, 1.5)}
 
-    def __init__(self, path, framing, scale=1.0, mode="person", drop=(), erase=(), inpaint=None, add=()):
+    def __init__(self, path, framing, scale=1.0, mode="person", drop=(), erase=(), inpaint=None, add=(), offset=(0, 0)):
         self.scale = scale
+        self.offset = offset
         self._still = None
         self._matte = None
         if path.endswith(".jpg"):  # pre-cropped square still: the camera moves supply the motion
@@ -100,8 +102,10 @@ class Footage:
         f = cv2.resize(f[y0:y0 + s, x0:x0 + s], (W, W), interpolation=cv2.INTER_AREA)
         mask = self._matte if self._matte is not None else cutout.clean(self._mask(f))
         lum = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
-        if self.scale != 1.0:  # shrink the subject, anchored bottom-centre so the body still meets the frame edge
+        if self.scale != 1.0 or any(self.offset):
+            # shrink (anchored bottom-centre so the body still meets the frame edge) and/or move the subject
             M = cv2.getRotationMatrix2D((W / 2, W), 0, self.scale)
+            M[:, 2] += self.offset
             lum = cv2.warpAffine(lum, M, (W, W), borderValue=0)
             mask = cv2.warpAffine(mask, M, (W, W), borderValue=0)
         self._still = (lum, mask, False)
@@ -141,7 +145,7 @@ def subject_for(shot):
         if os.path.exists(p):
             mode = os.environ.get("CUTOUT_MODE") or shot.get("cutout", "person")  # override for quick previews
             src = Footage(p, shot["framing"], shot.get("subject_scale", 1.0), mode, shot.get("drop", ()),
-                          shot.get("erase", ()), shot.get("inpaint"), shot.get("add", ()))
+                          shot.get("erase", ()), shot.get("inpaint"), shot.get("add", ()), shot.get("subject_offset", (0, 0)))
             shot.setdefault("focus", head_focus(src.get(0)[1]))
             return src
     return Placeholder(shot)
@@ -193,12 +197,32 @@ def outline(mask, k, width=6):
 
 
 # ---------------------------------------------------------------- overlays
-STK = {k: sticker(k, 200) for k in ["phone", "phone_back", "bolt", "chip", "battery", "lens", "wifi", "cpu_badge"]}
+STK = {k: sticker(k, 200) for k in ["phone_back", "lens", "cpu_badge"]}
 STRIPED = gfx.striped_phone(300)
-TITLE_TOP = gfx.text_layer([("ARUN", 1.0), ("the", 0.7)], "anton", 150, spacing=0.82)
-TITLE_BOSS = gfx.text_layer([("BOSS", 1.15)], "anton", 150, spacing=0.82)
-TITLE_SCALE = 0.82
+TITLE_TOP = gfx.glow_title([("ARUN", 1.0), ("the", 0.72)], size=90)
+TITLE_BOSS = gfx.glow_title([("BOSS", 1.0)], size=90)
+TITLE_SCALE = 1.0
 WATERMARK = gfx.watermark("MTD")
+
+# Real product photos (props.py) in place of drawn icons.
+# Stickers that slam in at the end of the title shot: name, x, y, scale, angle, direction they fly in from
+POP = [("phone_iphone_modern", 470, 92, 1.0, 34, (0.4, -1)), ("battery_duracell_aa", 112, 528, 0.85, 16, (-1, 0.5)),
+       ("battery_powerbank_silver", 505, 500, 0.85, -16, (1, 0.6))]
+# Dark interlude: batteries drifting (name, start xy, end xy, scale, angles), then two phones whip in
+# from the sides and hold at the frame edges where the reference has two hands
+FLOAT = [("battery_9v_trio", (418, 142), (452, 120), 0.74, (-20, -11)),
+         ("battery_duracell_green", (118, 270), (100, 236), 0.8, (14, 26)),
+         ("battery_lipo_large", (430, 440), (468, 426), 0.72, (-8, 4))]
+FLY_AT = 115
+FLY = [("phone_iphone12pro_standing", -1, 330, 1.3, -12), ("phone_galaxy_s7_front", 1, 300, 1.32, 53)]  # tops lean in
+# S07: two small props flanking the MTD badge in front of him (the reference has a stopwatch and a rocket there)
+FLANK = [("battery_powerbank_silver", 122, 330, 0.36, 24), ("battery_duracell_aa_vertical", 462, 330, 0.34, -18)]
+
+
+def ease(t):
+    """Smoothstep from 0 to 1 over t in [0, 1]."""
+    t = min(max(t, 0.0), 1.0)
+    return t * t * (3 - 2 * t)
 
 
 def draw_rect_outline(dst, cx, cy, w, h, ang, thick=3, val=0.95):
@@ -210,17 +234,21 @@ def draw_rect_outline(dst, cx, cy, w, h, ang, thick=3, val=0.95):
 
 def behind(shot, f, k, img):
     o = shot["overlays"]
+    if "title_text" in o:  # behind him, like the reference: his head covers the end of the name
+        title(shot, f, k, img)
     if "striped_phones" in o:
         place(img, *STRIPED, 470 + k * 0.8, 190, 0.95, -18)
         place(img, *STRIPED, 520 - k * 0.5, 470, 0.75, -24)
-    if "icon_field" in o or "icon_orbit" in o:
-        t = f / FPS
-        for i, (name, x, y, s) in enumerate([("phone_back", 430, 130, 1.35), ("bolt", 430, 430, 1.3),
-                                             ("chip", 120, 360, 1.2), ("battery", 130, 120, 1.0)]):
-            ang = 20 * math.sin(t * 2 + i) - 25
-            if "icon_orbit" in o:
-                x, y, s = 288 + 230 * math.cos(t * 1.6 + i * 1.57), 300 + 200 * math.sin(t * 1.6 + i * 1.57), s * 0.8
-            place(img, *STK[name], x + 30 * math.sin(t * 3 + i), y + 20 * math.cos(t * 2.5 + i), s, ang)
+    if "icon_field" in o:
+        n = shot["end"] - shot["start"]
+        shrink = ease((f - FLY_AT) / 6)  # once the phones arrive the batteries pull back toward the middle
+        for i, (name, (xa, ya), (xb, yb), s, (aa, ab)) in enumerate(FLOAT):
+            q = k / max(n - 1, 1)
+            x, y = xa + (xb - xa) * q, ya + (yb - ya) * q
+            x, y = x + (288 - x) * 0.35 * shrink, y + (300 - y) * 0.3 * shrink
+            props.draw(img, name, x + 6 * math.sin(f * 0.21 + i), y + 5 * math.cos(f * 0.17 + i),
+                       s * (1 - 0.38 * shrink), aa + (ab - aa) * q, soft=1.1)
+
     if "pixel_stairs" in o:
         for side in (0, 1):
             for i in range(9):
@@ -235,14 +263,21 @@ def front(shot, f, k, img):
         draw_rect_outline(img, 205, 215, 330, 330, -22 + k * 0.3)
     if "tilt_rect2" in o:
         draw_rect_outline(img, 300, 260, 560, 470, 6 - k * 0.2)
-    if "title_text" in o:
-        title(shot, f, k, img)
-    if "phones_fly_in" in o and f >= 116:
-        kk = f - 116
-        p = 1 - (1 - min(kk / 5, 1)) ** 3
-        for side in (-1, 1):
-            x = 288 + side * (520 - 340 * p) + side * 8 * math.sin(kk * 0.8)
-            place(img, *STK["phone"], x, 300 + 30 * side, 1.3, side * 18 + kk * side * 0.6)
+    if "phones_fly_in" in o and f >= FLY_AT - 1:
+        for name, side, y, s, ang in FLY:
+            def path(t, side=side, y=y, s=s, ang=ang):
+                u = t - FLY_AT
+                if u < 0:
+                    return 288 + side * 560, y, s, ang, 0.0
+                p = 1 - (1 - min(u / 2.5, 1)) ** 3  # whips in over 2.5 frames, then holds at the edge
+                x = 288 + side * (560 - 340 * p) + side * 7 * math.sin(u * 0.7)
+                return x, y + 6 * math.cos(u * 0.6 + side), s, ang + 3 * math.sin(u * 0.5 + side), 1.0
+            props.draw_moving(img, name, path, f)
+    if "icon_orbit" in o:
+        for i, (name, x, y, s, ang) in enumerate(FLANK):
+            pop = (0.5, 1.12)[k] if k < 2 else 1.0
+            props.draw(img, name, x + 10 * math.sin(f * 0.45 + 2 * i), y + 8 * math.cos(f * 0.38 + 2 * i), s * pop,
+                       ang + 6 * math.sin(f * 0.3 + i))
     if "badge" in o and k < 16:
         # editor tag: pops in over 2 frames, holds, then breaks up into vertical strips
         s = (0.55, 1.12, 1.0)[k] if k < 3 else 1.0
@@ -266,16 +301,22 @@ def front(shot, f, k, img):
 
 def screen(shot, f, img):
     """Graphics stuck to the screen rather than the scene, drawn after the camera (they ignore its zoom)."""
-    if "icons_pop" in shot["overlays"] and f >= shot["icons_at"]:
-        # stickers slam in around the frame edge, half off screen, like the reference's at 2.97 s
-        for i, (name, x, y, s, ang) in enumerate([("phone_back", 440, 24, 1.2, 25), ("bolt", 525, 470, 1.5, -10),
-                                                  ("battery", 40, 505, 1.3, 20)]):
-            kk = f - shot["icons_at"] - i
-            if kk >= 0:
-                s *= (0.4, 1.2)[kk] if kk < 2 else 1.0
-                lum, a = STK[name]
-                place(img, np.clip(lum * 1.25, 0, 1), a, x + 6 * math.sin(f * 0.9 + i), y + 5 * math.cos(f * 1.1 + i),
-                      s, ang + 3 * math.sin(f * 0.7 + i))
+    if "icons_pop" in shot["overlays"] and f >= shot["icons_at"] - 1:
+        # real phone and batteries slam in around the frame edge, half off screen, like the reference's at 2.97 s
+        for i, (name, x, y, s, ang, (dx, dy)) in enumerate(POP):
+            def path(t, i=i, x=x, y=y, s=s, ang=ang, dx=dx, dy=dy):
+                u = t - shot["icons_at"] - i
+                if u < 0:
+                    return x, y, s, ang, 0.0
+                if u < 1:      # flies in from off screen and overshoots
+                    m, off = 0.5 + 0.65 * u, 1 - u
+                elif u < 2:
+                    m, off = 1.15 - 0.15 * (u - 1), 0.0
+                else:
+                    m, off = 1.0, 0.0
+                return (x + dx * 150 * off + 5 * math.sin(t * 0.9 + i), y + dy * 150 * off + 4 * math.cos(t * 1.1 + i),
+                        s * m, ang + 12 * off + 3 * math.sin(t * 0.7 + i), 1.0)
+            props.draw_moving(img, name, path, f)
 
 
 def title(shot, f, k, img):
@@ -284,14 +325,14 @@ def title(shot, f, k, img):
     if k in cfg["off"]:
         return
     s = TITLE_SCALE
-    x0 = 12 + 0.6 * k  # the push-in moves this to the frame edge, clipping the A like the reference's "HIKARU"
+    x0 = 22 + 0.6 * k  # the words fill the space left of him; he overlaps their last letter a little
     layer = np.zeros((W, W), np.float32)
     tl, ta = TITLE_TOP
-    a = place(layer, tl, ta, x0 + s * tl.shape[1] / 2, 46 + s * tl.shape[0] / 2, s, 0)
+    a = place(layer, tl, ta, x0 + s * tl.shape[1] / 2, 26 + s * tl.shape[0] / 2, s, 0)
     if k >= cfg["boss_at"] and k not in cfg["boss_off"]:
         bl, ba = TITLE_BOSS
         pop = {0: 0.75, 1: 1.08}.get(k - cfg["boss_at"], 1.0)
-        bx, by = x0 + s * bl.shape[1] / 2, 217 + s * bl.shape[0] / 2
+        bx, by = x0 + s * bl.shape[1] / 2, 212 + s * bl.shape[0] / 2
         a = np.maximum(a, place(layer, bl, ba, bx, by, s * pop, 0))
     g = cfg["glitch"].get(k, 1.0 if k == cfg["boss_at"] else 0.0)
     if g:  # sliced rows and a horizontal ghost on the lettering only
@@ -304,7 +345,7 @@ def title(shot, f, k, img):
         if g > 0.3:
             layer = np.maximum(layer, 0.8 * line_blur(layer, 34 * g, 0))
             a = np.maximum(a, 0.8 * line_blur(a, 34 * g, 0))
-    img[:] = img * (1 - a) + layer
+    img[:] = np.maximum(img * (1 - a) + layer, img)  # glow only ever brightens what is behind it
 
 
 _tear_path = None
@@ -439,11 +480,12 @@ def photograph(i, srcs, f):
         img = glitch(img, st["glitch"], f)
     if st["lens"] > 0.01:
         img = lens_exit(img, st["lens"])
-    screen(shot, f, img)
     flicker = CUTS[shot["start"]].get("smear_in", {}).get(f - shot["start"])
     if flicker:
         img = smear(img, **flicker)
-    return tone(img, st["gain"]) + st["lift"]
+    img = tone(img, st["gain"]) + st["lift"]
+    screen(shot, f, img)
+    return img
 
 
 def neighbour(j, srcs, f):

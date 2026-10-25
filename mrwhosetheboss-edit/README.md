@@ -16,9 +16,16 @@ Cutouts use BiRefNet (portrait matte, plus objects in his hands for `held` shots
 `footage/` because CPU inference takes about a minute per still and needs about 8 GB of RAM. The first
 render after `fetch_footage.py stills` computes them, and later renders take about 20 s.
 
+## Props
+
+The phones and batteries in the title shot (2.97 s), the dark interlude (3.37–4.40 s) and the MTD shot
+are real product photos under CC BY / CC0, listed in `props.json`. `python3 fetch_footage.py props`
+downloads them into `props/` and writes `CREDITS.md`. CC BY requires crediting the photographers, so
+publish the short credit line from `CREDITS.md` with the video. Mattes are cached like the subject's.
+
 ## Swapping in video clips
 
-Requirements: `pip install yt-dlp rembg[cpu] onnxruntime opencv-python-headless numpy pillow`, plus ffmpeg and the
+Requirements: `pip install yt-dlp rembg[cpu] onnxruntime opencv-python-headless numpy pillow` (then `python3 fetch_footage.py stills` and `python3 fetch_footage.py props`), plus ffmpeg and the
 fonts in `fonts/` (Anton, Silkscreen, Bungee from @fontsource, OFL-licensed).
 
 0. `python3 fetch_footage.py stills` re-downloads and crops the thumbnails used now.

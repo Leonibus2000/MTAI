@@ -7,6 +7,9 @@
       For every slot in sources.json with a thumbnail and crop, downloads the official
       video thumbnail and writes footage/<slot>.jpg (square crop). Fallback when video
       downloads are refused; clips in footage/<slot>.mp4 take priority in render.py.
+  python3 fetch_footage.py props
+      Downloads the CC BY / CC0 product photos listed in props.json (phones, batteries) into props/,
+      and writes CREDITS.md with the attribution to publish alongside the video.
   python3 fetch_footage.py fetch
       For every slot in sources.json that has a url and start time, downloads only
       that section (yt-dlp --download-sections) and writes footage/<slot>.mp4, trimmed
@@ -85,12 +88,49 @@ def stills():
         print(sid, "<-", s["thumbnail"])
 
 
+def fetch_props():
+    import urllib.request
+    meta = json.load(open(os.path.join(HERE, "props.json")))
+    out = os.path.join(HERE, "props")
+    os.makedirs(out, exist_ok=True)
+    for name, p in meta.items():
+        dst = os.path.join(out, name + ".jpg")
+        if os.path.exists(dst):
+            continue
+        # Wikimedia asks for a descriptive user agent; the Openverse proxy (Flickr, rawpixel) wants a browser one
+        ua = ("MTD-video-edit/1.0 (personal, non-bulk)" if p["source"] == "wikimedia" else "Mozilla/5.0 (X11; Linux x86_64)")
+        with urllib.request.urlopen(urllib.request.Request(p["download"], headers={"User-Agent": ua}), timeout=60) as r:
+            open(dst, "wb").write(r.read())
+        print(name, "<-", p["page"])
+    write_credits(meta)
+
+
+def write_credits(meta):
+    lines = ["# Credits", "",
+             "Product photos in the title shot, the dark interlude and the MTD shot (cropped, cut out and converted to",
+             "black-and-white for this edit). Attribution required by their licences:", ""]
+    for name, p in meta.items():
+        who = p["creator"]
+        lines.append(f"- \"{p['title']}\" by {who}, {p['license']} ({p['license_url']}), {p['page']}")
+    by = {}
+    for p in meta.values():
+        if p["license"].startswith("CC BY"):
+            by.setdefault(p["creator"], set()).add(p["license"])
+    short = ", ".join(f"{who} ({'/'.join(sorted(lic))})" for who, lic in by.items())
+    lines += ["", "Short version for a video description:", "",
+              f"Product photos by {short}, via Flickr/Wikimedia Commons; plus CC0 photos. Details in CREDITS.md.", ""]
+    open(os.path.join(HERE, "CREDITS.md"), "w").write("\n".join(lines))
+    print("wrote CREDITS.md")
+
+
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "scout":
         every = float(sys.argv[sys.argv.index("--every") + 1]) if "--every" in sys.argv else 1.5
         scout(sys.argv[2], every)
     elif len(sys.argv) >= 2 and sys.argv[1] == "stills":
         stills()
+    elif len(sys.argv) >= 2 and sys.argv[1] == "props":
+        fetch_props()
     elif len(sys.argv) >= 2 and sys.argv[1] == "fetch":
         fetch()
     else:

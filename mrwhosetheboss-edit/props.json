@@ -1,0 +1,118 @@
+{
+  "phone_iphone12pro_standing": {
+    "kind": "phone",
+    "title": "Apple iPhone 12 Pro - Standing",
+    "creator": "ajay_suresh",
+    "creator_url": "https://www.flickr.com/photos/83136374@N05",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0/",
+    "page": "https://www.flickr.com/photos/83136374@N05/50535468262",
+    "download": "https://api.openverse.org/v1/images/27b77508-0c1d-409e-902c-b28ff31c0cc3/thumb/?full_size=true",
+    "source": "flickr"
+  },
+  "phone_iphone_modern": {
+    "kind": "phone",
+    "title": "Apple iPhone 12 Pro - Laying Flat",
+    "creator": "ajay_suresh",
+    "creator_url": "https://www.flickr.com/photos/83136374@N05",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0/",
+    "page": "https://www.flickr.com/photos/83136374@N05/50535313756",
+    "download": "https://api.openverse.org/v1/images/4788f2eb-603f-4200-b755-d41a9a6cf6d5/thumb/?full_size=true",
+    "source": "flickr"
+  },
+  "phone_galaxy_s7_front": {
+    "kind": "phone",
+    "title": "Samsung Galaxy S6 Edge",
+    "creator": "Janitors",
+    "creator_url": "https://www.flickr.com/photos/65265630@N03",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0/",
+    "page": "https://www.flickr.com/photos/65265630@N03/16505221967",
+    "download": "https://api.openverse.org/v1/images/792fe904-db53-4568-846f-da97257dc5c4/thumb/?full_size=true",
+    "source": "flickr"
+  },
+  "battery_duracell_aa": {
+    "kind": "battery",
+    "title": "Duracell Battery",
+    "creator": "ajay_suresh",
+    "creator_url": "https://www.flickr.com/photos/83136374@N05",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0/",
+    "page": "https://www.flickr.com/photos/83136374@N05/51825488538",
+    "download": "https://api.openverse.org/v1/images/fdc26206-9dc8-4590-8b76-d19b378a9dac/thumb/?full_size=true",
+    "source": "flickr"
+  },
+  "battery_duracell_aa_vertical": {
+    "kind": "battery",
+    "title": "Duracell battery AA type",
+    "creator": "Anton Fomkin",
+    "creator_url": "https://www.flickr.com/photos/32598846@N07",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0/",
+    "page": "https://www.flickr.com/photos/32598846@N07/3046849320",
+    "download": "https://api.openverse.org/v1/images/06f6f9f9-fc55-4bc9-87f2-a440494a9836/thumb/?full_size=true",
+    "source": "flickr",
+    "keep": [
+      0.414,
+      0.0,
+      1.0,
+      1.0
+    ]
+  },
+  "battery_duracell_green": {
+    "kind": "battery",
+    "title": "Duracell alkaline AAA battery, location",
+    "creator": "unknown (rawpixel)",
+    "creator_url": null,
+    "license": "CC0 1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "page": "https://www.rawpixel.com/image/6113326/photo-image-public-domain-green-free",
+    "download": "https://api.openverse.org/v1/images/a098ad2f-2aae-4eea-9c3c-dd3ecd48e6a2/thumb/?full_size=true",
+    "source": "rawpixel"
+  },
+  "battery_lipo_large": {
+    "kind": "battery",
+    "title": "Lithium Ion Battery - 2Ah",
+    "creator": "SparkFunElectronics",
+    "creator_url": "https://www.flickr.com/photos/41898857@N04",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0/",
+    "page": "https://www.flickr.com/photos/41898857@N04/36604421606",
+    "download": "https://api.openverse.org/v1/images/c52ee355-0370-4d91-9b85-a941f27b931a/thumb/?full_size=true",
+    "source": "flickr"
+  },
+  "battery_powerbank_silver": {
+    "kind": "battery",
+    "title": "5200mah-original-xiaomi-portable-power-bank",
+    "creator": "androidPT.Oficial",
+    "creator_url": "https://www.flickr.com/photos/123670378@N02",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0/",
+    "page": "https://www.flickr.com/photos/123670378@N02/14110619209",
+    "download": "https://api.openverse.org/v1/images/cb2642b0-62ff-4e77-9e02-bc24c962618f/thumb/?full_size=true",
+    "source": "flickr"
+  },
+  "battery_9v_trio": {
+    "kind": "battery",
+    "title": "daily bw: change your smoke detector batteries",
+    "creator": "mccun934",
+    "creator_url": "https://www.flickr.com/photos/51035597937@N01",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0/",
+    "page": "https://www.flickr.com/photos/51035597937@N01/8411597147",
+    "download": "https://api.openverse.org/v1/images/9832b4f8-895f-48ba-a650-d9f8d5a7d5a9/thumb/?full_size=true",
+    "source": "flickr"
+  },
+  "plate_pcb_macro": {
+    "kind": "plate",
+    "title": "Computer Circuit Board Macro",
+    "creator": "unknown (rawpixel)",
+    "creator_url": null,
+    "license": "CC0 1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "page": "https://www.rawpixel.com/image/5966842/computer-circuit-board-macro",
+    "download": "https://api.openverse.org/v1/images/529bb809-30c2-4431-b290-49c996262cc2/thumb/?full_size=true",
+    "source": "rawpixel"
+  }
+}

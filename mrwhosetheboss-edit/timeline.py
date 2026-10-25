@@ -40,8 +40,10 @@ SHOTS = [
          cam=dict(push=0.004, rot0=1, spin=-0.3, shake=1.5, exposure=(0.7, 0.5))),
     dict(id="S05", start=70, framing="mcu", need="Hand over mouth / leaning in, mid close-up",
          ref="Hikaru hand over mouth; glitch cut in, 'HIKARU the' flickers on, 'GREAT' lands f80; icons pop at f89",
-         look=dict(poster=4, halftone=0.3), bg="circuit", overlays=["title_text", "icons_pop"], cutout="person",
-         cam=dict(push=0.004, spin=-0.4, shake=1.5, exposure=(0.7, 0.9), zoom_to=[(8, 5, 0.24, (20, 150))],
+         look=dict(poster=4, halftone=0.3), bg="pcb_photo", overlays=["title_text", "icons_pop"], cutout="person",
+         subject_offset=(160, 0), subject_scale=0.94,  # him right of centre, the title on the left behind him
+         focus=(230, 230),  # camera pivots between the title and his face, so the push-in keeps both in frame
+         cam=dict(push=0.002, spin=-0.4, shake=1.5, exposure=(0.95, 1.25), zoom_to=[(8, 5, 0.15, (230, 230))],
                   jolt=[(12.6, 2, 55, -25)]),
          # title flicker copied from the reference: on/off per frame, BOSS arrives with the zoom
          title=dict(off=(1, 3), glitch={0: 0.5, 2: 0.6, 4: 1.0, 5: 0.4, 18: 0.7}, boss_at=10, boss_off=(11,)),
@@ -49,7 +51,7 @@ SHOTS = [
     dict(id="S06", start=101, framing=None, need=None,
          ref="Dark bg, floating stickers (rocket, bolt, stopwatch); two hands fly in at f116",
          look=dict(poster=0, halftone=0.0), bg="dark", overlays=["icon_field", "phones_fly_in"],
-         cam=dict(push=0.0, spin=0.12, shake=0.4, beat=1.5, exposure=0.75)),
+         cam=dict(push=0.0, spin=0.12, shake=0.4, beat=1.5, exposure=1.0, jolt=[(13.6, 2, 70, -10)])),
     dict(id="S07", start=132, framing="cu", need="Close-up, side-eye at a phone / product in hand",
          ref="Hikaru looking down, 'MUHMA' pixel badge on gem sticker, icons orbit",
          look=dict(poster=0, halftone=0.2), bg="dark", overlays=["badge", "icon_orbit"], cutout="held",
@@ -119,7 +121,7 @@ CUTS = {
     70: dict(wipe=dict(cover=(0.22, 0.42, 0.64), smear=(40, 64, 90)),
              smear_in={0: dict(blur=22, echo=(40, 0.45)), 1: dict(blur=48, echo=(56, 0.4), dark=0.72),
                        2: dict(blur=14, echo=(26, 0.35))},
-             arrive=[("push", dict(amount=0.06, T=4))], shake=10),
+             arrive=[("push", dict(amount=0.03, T=4))], shake=10),
     101: dict(exit=[("pull", dict(frames=2, amount=0.06))],
               arrive=[("defocus", dict(frames=5, sigma=7))], overlap=False),
     132: dict(exit=[("defocus", dict(frames=3, sigma=10)), ("dip", dict(frames=3, amount=0.4))],
