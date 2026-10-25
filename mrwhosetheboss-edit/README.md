@@ -1,6 +1,6 @@
 # Mrwhosetheboss edit (recreation of the Hikaru Nakamura edit)
 
-Output: 576×576, 30 fps, 8.9 s MP4. Black-and-white posterize/halftone look, white cut-out outlines,
+Output: 576×576, 30 fps, 8.73 s MP4 (262 frames = 16 beats) that loops: the last shot whips into the first and the music carries across the seam, so it can play on repeat. Black-and-white posterize/halftone look, white cut-out outlines,
 whip/zoom/glitch transitions on the music accents, film grain, Anton/Silkscreen typography and
 procedural tech stickers. `EDIT_TIMELINE.md` has the full shot-by-shot breakdown.
 

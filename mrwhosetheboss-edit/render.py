@@ -10,6 +10,8 @@ import argparse
 import math
 import os
 import subprocess
+import tempfile
+import wave
 
 import cv2
 import numpy as np
@@ -444,16 +446,26 @@ def photograph(i, srcs, f):
     return tone(img, st["gain"]) + st["lift"]
 
 
+def neighbour(j, srcs, f):
+    """Shot j at frame f, wrapping around the loop: before the first shot comes the last one, one loop
+    later in its own timeline, and after the last shot comes the first."""
+    if j < 0:
+        return photograph(len(SHOTS) - 1, srcs, f + N_FRAMES)
+    if j >= len(SHOTS):
+        return photograph(0, srcs, f - N_FRAMES)
+    return photograph(j, srcs, f)
+
+
 def render_frame(i, srcs, f):
     shot = SHOTS[i]
     c0, c1 = shot["start"], shot["end"]
     img = photograph(i, srcs, f)
     # two-frame overlap across motion cuts: both shots streaking at once hides the splice
     into, out_of = CUTS[c0], CUTS[c1]
-    if f == c0 and i > 0 and into.get("exit") and into.get("overlap", True):
-        img = 0.76 * img + 0.24 * photograph(i - 1, srcs, f)
-    if f == c1 - 1 and i + 1 < len(SHOTS) and out_of.get("exit") and out_of.get("overlap", True):
-        img = 0.76 * img + 0.24 * photograph(i + 1, srcs, f)
+    if f == c0 and into.get("exit") and into.get("overlap", True):
+        img = 0.76 * img + 0.24 * neighbour(i - 1, srcs, f)
+    if f == c1 - 1 and out_of.get("exit") and out_of.get("overlap", True):
+        img = 0.76 * img + 0.24 * neighbour(i + 1, srcs, f)
     wipe = out_of.get("wipe")
     if wipe and i + 1 < len(SHOTS) and f >= c1 - len(wipe["cover"]):
         j = f - (c1 - len(wipe["cover"]))
@@ -488,6 +500,38 @@ def finish(img, f):
     return (img * 255).astype(np.uint8)
 
 
+def loop_audio(path, seconds, xfade=0.045, rate=44100, edge=0.0015):
+    """The source's audio cut to the loop length as a temp WAV. Its first `xfade` seconds crossfade from
+    the audio that follows the loop point into the real start, so on repeat the sound runs straight
+    from the end into the beginning.
+
+    The length is rounded down to whole AAC frames (1024 samples, 2.6 ms short of 262 frames at 44.1 kHz):
+    a partial last frame gets zero padding that only some players trim, and FFmpeg-based tools (most
+    upload pipelines) don't, which leaves a 21 ms dropout at every repeat. With whole frames there is no
+    padding; players that loop on the video length see a 2.6 ms gap, softened by `edge`-long fades."""
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-vn", "-ac", "2", "-ar", str(rate), "-f", "f32le", "-"],
+                         check=True, capture_output=True).stdout
+    src = np.frombuffer(raw, np.float32).reshape(-1, 2)
+    n, fade = int(seconds * rate) // 1024 * 1024, int(round(xfade * rate))
+    out = np.zeros((n, 2), np.float32)
+    out[:min(n, len(src))] = src[:n]
+    tail = src[n:n + fade]
+    if len(tail):
+        u = np.linspace(0, 1, len(tail), dtype=np.float32)[:, None] * (np.pi / 2)
+        out[:len(tail)] = out[:len(tail)] * np.sin(u) + tail * np.cos(u)  # equal-power crossfade
+    e = int(edge * rate)
+    ramp = (0.5 - 0.5 * np.cos(np.linspace(0, np.pi, e, dtype=np.float32)))[:, None]
+    out[:e] *= ramp
+    out[-e:] *= ramp[::-1]
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    with wave.open(tmp, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes((np.clip(out, -1, 1) * 32767).astype("<i2").tobytes())
+    return tmp.name
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(HERE, "out.mp4"))
@@ -497,8 +541,9 @@ def main():
 
     cmd = ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{W}x{W}",
            "-r", str(FPS), "-i", "-"]
-    if a.audio:
-        cmd += ["-i", a.audio, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "160k"]
+    audio = loop_audio(a.audio, N_FRAMES / FPS) if a.audio else None
+    if audio:
+        cmd += ["-i", audio, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "160k"]
     cmd += ["-c:v", "libx264", "-crf", "17", "-preset", "slow", "-pix_fmt", "yuv420p",
             "-t", f"{N_FRAMES / FPS:.3f}", "-movflags", "+faststart", a.out]
     enc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
@@ -515,6 +560,8 @@ def main():
                 cv2.imwrite(os.path.join(a.debug_frames, f"f{f:03d}.png"), fr)
     enc.stdin.close()
     enc.wait()
+    if audio:
+        os.remove(audio)
     print("wrote", a.out)
 
 

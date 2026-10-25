@@ -1,5 +1,7 @@
 """Shot timeline reverse-engineered from the Hikaru reference (30 fps, 267 frames, 8.9 s).
 
+The edit loops: it is 16 beats long and its last shot whips into the first one.
+
 Frame numbers are reference frame indices. Cuts land on detected audio onsets
 (~110 BPM, a hit every ~8 frames; cuts every ~16-18 frames). Camera numbers come from
 optical-flow measurements of the reference (ana/motion.py): per-frame zoom, rotation and
@@ -7,7 +9,9 @@ translation around every cut.
 """
 
 FPS = 30
-N_FRAMES = 267
+# 16 beats at 110 BPM (4 bars): a whole number of beats, so the rhythm carries straight across the
+# loop seam. The reference's 267 frames (16.3 beats) would leave a stumble of 0.17 s at every repeat.
+N_FRAMES = 262
 SIZE = 576
 
 # cam: push = log-zoom per frame (0.017 ~ +1.7 %/frame), spin = deg/frame, rot0 = starting tilt,
@@ -79,7 +83,7 @@ SHOTS = [
          ref="Hikaru big smile, LED light-bar bg, outline",
          look=dict(poster=0, halftone=0.15), bg="light_bars", overlays=[], cutout="person",
          cam=dict(push=0.003, spin=0.3, shake=1.5, exposure=1.2)),
-    dict(id="S14", start=254, framing="ms", need="Outro: holding a product, phone wall behind",
+    dict(id="S14", start=250, framing="ms", need="Outro: holding a product, phone wall behind",
          ref="Hikaru holding board, chess-piece backdrop, end blur",
          look=dict(poster=0, halftone=0.2), bg="phone_wall", overlays=["held_phone"], cutout="held",
          add=[[(0, 440), (576, 432), (576, 576), (0, 576)]],  # keep the table of phones he sits behind
@@ -88,7 +92,7 @@ SHOTS = [
 
 # Audio accents (frame numbers) from onset detection on the reference track; drive shake kicks.
 ONSETS = [2, 20, 28, 36, 45, 53, 61, 69, 73, 94, 102, 118, 126, 135, 151, 159, 167, 176, 184, 200,
-          204, 216, 225, 233, 241, 249, 257, 266]
+          204, 216, 225, 233, 241, 249, 257]
 
 for i, s in enumerate(SHOTS):
     s["end"] = SHOTS[i + 1]["start"] if i + 1 < len(SHOTS) else N_FRAMES
@@ -135,8 +139,12 @@ CUTS = {
               arrive=[("whip", dict(frames=5, angle=180, dist=70))], shake=10),
     238: dict(exit=[("whip", dict(frames=5, angle=180, dist=170)), ("zoom", dict(frames=5, amount=0.30))],
               arrive=[("push", dict(amount=0.20, T=5))], shake=14),
-    254: dict(exit=[("pull", dict(frames=5, amount=0.38)), ("spin", dict(frames=5, deg=7)),
+    # Reference cut at 254; here on the onset at 249 so the last shot keeps 12 frames before the loop.
+    250: dict(exit=[("pull", dict(frames=5, amount=0.38)), ("spin", dict(frames=5, deg=7)),
                     ("whip", dict(frames=2, angle=139, dist=50))],
               arrive=[("push", dict(amount=0.08, T=5))], shake=12),
-    N_FRAMES: dict(),
+    # Loop seam: S14 whips out down-left, the same direction S01 whips in from at frame 0.
+    N_FRAMES: dict(exit=[("whip", dict(frames=4, angle=128, dist=170)), ("zoom", dict(frames=4, amount=0.18))]),
 }
+# The end cut and the start cut are one splice, so both ends of the edit see its exit and arrival.
+CUTS[0] = CUTS[N_FRAMES] = {**CUTS[N_FRAMES], **CUTS[0]}

@@ -2,13 +2,15 @@
 
 Reference: 576×576, 30 fps, 267 frames (8.90 s), HEVC + AAC. Music is about 110 BPM, with an accent every ~8 frames. Cuts land on accents every 16–18 frames.
 
+**This edit loops.** It is 262 frames (8.73 s), exactly 16 beats, and its last shot whips into its first. See *Loop* below.
+
 Detected audio onsets (frame): 2, 20, 28, 36, 45, 53, 61, 69, 73, 94, 102, 118, 126, 135, 151, 159, 167, 176, 184, 200, 204, 216, 225, 233, 241, 249, 257, 266
 
 Camera numbers come from optical flow on the reference (`analyze_motion.py`): per-frame zoom, rotation and translation around every cut.
 
 | Shot | Time | Frames | Reference content | Recreation (Mrwhosetheboss / tech) | Cutout | Camera in shot | Cut into this shot |
 |---|---|---|---|---|---|---|---|
-| S01 | 0.00–0.70s | 0–20 | Hikaru CU glaring, tilted white frame, striped rook stickers, halftone dot bg | Close-up, intense stare straight into lens (studio intro) | person | push +0.5%/f, spin +0.10°/f, tilt -3° | in: whip 150/4f; in: push 0.03; shake 14px |
+| S01 | 0.00–0.70s | 0–20 | Hikaru CU glaring, tilted white frame, striped rook stickers, halftone dot bg | Close-up, intense stare straight into lens (studio intro) | person | push +0.5%/f, spin +0.10°/f, tilt -3° | loop seam from S14 — out: whip 170/4f; out: zoom 0.18/4f; in: whip 150/4f; in: push 0.03; shake 14px; 2-frame overlap |
 | S02 | 0.70–1.30s | 21–38 | Hikaru ECU, heavy posterize + halftone, tilted frame, pixel-stair edge graphics | Extreme close-up of face, serious / unimpressed expression | person (erase) | push +0.2%/f, spin +0.45°/f, tilt -2° | out: zoom 0.55/5f; in: push 0.06; shake 12px; 2-frame overlap |
 | S03 | 1.30–1.83s | 39–54 | Hikaru pointing, checkerboard bg, white outline | Medium shot, pointing a finger / gesturing at camera | person | push +1.0%/f, spin -0.60°/f, tilt 2° | out: pull 0.3/4f; in: whip 90/2f; in: push 0.25; flash 0.22; shake 14px; 2-frame overlap |
 | S04 | 1.83–2.33s | 55–69 | Hikaru with glasses, hand on chin, diagonal stripe bg | Thinking pose, hand on chin, looking off-camera | person | push +0.4%/f, spin -0.30°/f, tilt 1°, exposure (0.7, 0.5) | out: whip 150/4f; out: zoom 0.16/3f; in: whip 50/2f; in: push 0.14; shake 12px; 2-frame overlap |
@@ -20,8 +22,8 @@ Camera numbers come from optical flow on the reference (`analyze_motion.py`): pe
 | S10 | 6.07–6.67s | 182–199 | Torn-paper diagonal split with halftone; circular sticker zooms through at f196 | Close-up reaction, shocked / surprised face | held (inpaint) | push +0.4%/f, spin +0.25°/f, exposure 1.5 | out: zoom 0.4/4f; out: spin 7/4f; in: push 0.32; shake 14px; 2-frame overlap |
 | S11 | 6.67–7.33s | 200–219 | Hikaru at board; camera crash-zooms into the board f213-218 | At desk with phones / unboxing, looking at a device | person | push +0.8%/f, spin -0.10°/f, exposure (1.1, 1.25) | out: zoom 0.1/3f; out: whip 40/2f; in: lens /2f; in: whip 30/2f; flash 0.15; shake 10px; 2-frame overlap |
 | S12 | 7.33–7.93s | 220–237 | Two players at angled board, white outlines | Holding a phone up to camera / comparing two phones | held (add, erase) | push +1.5%/f, spin +0.45°/f, tilt -2°, exposure 0.85 | out: crash 0.7/7f; out: whip 200/5f; out: bright 0.4/6f; in: whip 70/5f; shake 10px; 2-frame overlap |
-| S13 | 7.93–8.47s | 238–253 | Hikaru big smile, LED light-bar bg, outline | Big genuine smile / laugh, close-up | person | push +0.3%/f, spin +0.30°/f, exposure 1.2 | out: whip 170/5f; out: zoom 0.3/5f; in: push 0.2; shake 14px; 2-frame overlap |
-| S14 | 8.47–8.90s | 254–266 | Hikaru holding board, chess-piece backdrop, end blur | Outro: holding a product, phone wall behind | held (add) | push +1.6%/f, spin -0.50°/f, exposure 1.15 | out: pull 0.38/5f; out: spin 7/5f; out: whip 50/2f; in: push 0.08; shake 12px; 2-frame overlap |
+| S13 | 7.93–8.33s | 238–249 | Hikaru big smile, LED light-bar bg, outline | Big genuine smile / laugh, close-up | person | push +0.3%/f, spin +0.30°/f, exposure 1.2 | out: whip 170/5f; out: zoom 0.3/5f; in: push 0.2; shake 14px; 2-frame overlap |
+| S14 | 8.33–8.73s | 250–261 | Hikaru holding board, chess-piece backdrop, end blur | Outro: holding a product, phone wall behind | held (add) | push +1.6%/f, spin -0.50°/f, exposure 1.15 | out: pull 0.38/5f; out: spin 7/5f; out: whip 50/2f; in: push 0.08; shake 12px; 2-frame overlap |
 
 ## Camera and transitions (`camera.py`)
 
@@ -49,6 +51,15 @@ The reference's real cut here is at frame 70, not 73 (frame-difference detection
 | 80–82 | 'GREAT' appears (off on 81) as the camera pushes in | 'BOSS' pops in (off on 81) as the camera zooms toward the title |
 | 83–84 | Two heavily streaked frames | 2-frame `jolt` (55, −25 px out and back) |
 | 85–100 | Tight hold on the title + face; stickers slam in at the edges on f89 | Held zoom ×1.27; phone, bolt and battery stickers pop in at the frame edges on f89 (screen-space, so the zoom doesn't push them off) |
+
+## Loop
+
+- **Length:** 262 frames = 8.73 s = 16 beats (4 bars) at 110 BPM. The reference's 267 frames are 16.3 beats. Looped as-is, the gap between the last beat and the first would be 0.72 s instead of 0.55 s, a stumble at every repeat.
+- **Shot timing:** the S13 → S14 cut moves from the reference's 254 onto the music hit at 250, so the outro keeps 12 frames.
+- **Seam transition:** S14 holds, then whips out down-left (170 px, plus a 0.18 zoom-in over 4 frames, accelerating). S01 arrives along the same path (its whip-in, 150 px over 4 frames, decelerating). Like the other motion cuts, the last frame and the first frame each blend 24% of the other shot mid-move. The renderer wraps around for this: before S01 comes S14, one loop later in its own timeline.
+- **Audio:** the first 45 ms of the file crossfade (equal power) from the music that follows the loop point into the real start. On repeat, the sound continues the uncut track across the seam (waveform correlation 0.995).
+- **Audio length:** rounded down to whole AAC frames (376 × 1024 samples = 8.7307 s, 2.6 ms short of the video). A partial last frame gets zero padding that only some players trim. FFmpeg, and so most upload pipelines, does not, which would leave a 21 ms dropout and a click at every repeat. Players that loop on the audio get a sample-continuous seam. Players that loop on the video get a 2.6 ms gap, softened by 1.5 ms fades.
+- **Checks:** a 3× concatenation shows a continuous whip across each seam (55 → 63 px/frame in, 48 → 31 out) and no duplicated frames. The high-frequency energy at each audio seam is below the median of the surrounding music, so there is no click.
 
 ## Cutouts (`cutout.py`)
 
