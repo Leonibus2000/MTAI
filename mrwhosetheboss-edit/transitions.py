@@ -52,6 +52,29 @@ def _keyline(d, width=3.0):
     return _fill(d - width) - _fill(d)
 
 
+def _line_blur(img, length, angle):
+    """Motion blur along `angle` degrees (y down), `length` px."""
+    length = int(length)
+    if length < 2:
+        return img
+    k = np.zeros((length, length), np.float32)
+    c = (length - 1) / 2
+    a = math.radians(angle)
+    cv2.line(k, (int(round(c - c * math.cos(a))), int(round(c - c * math.sin(a)))),
+             (int(round(c + c * math.cos(a))), int(round(c + c * math.sin(a)))), 1.0, 1)
+    return cv2.filter2D(img, -1, k / k.sum(), borderType=cv2.BORDER_REFLECT)
+
+
+def glare(mask, phase, width=0.1, strength=0.32, angle=-35.0):
+    """A soft diagonal highlight sweeping across glass (phone screens), clipped to `mask`;
+    `phase` 0..1 carries it from one corner to the other."""
+    th = math.radians(angle)
+    s = (_XX * math.cos(th) - _YY * math.sin(th)) / W
+    lo, hi = float(s.min()), float(s.max())
+    c = lo - 0.2 + (hi - lo + 0.4) * _clip(phase)
+    return (np.exp(-((s - c) / width) ** 2) + 0.35 * np.exp(-((s - c - 2.2 * width) / (0.35 * width)) ** 2)) * mask * strength
+
+
 def _shutter(fn, p, dp, n=3, travel=None, step=5.0, n_max=24):
     """Average fn over the shutter [p - dp/2, p + dp/2]. With `travel(q0, q1)` (px an edge moves across
     the shutter), the sample count adapts so fast geometry blurs smoothly instead of ghosting."""
@@ -63,15 +86,26 @@ def _shutter(fn, p, dp, n=3, travel=None, step=5.0, n_max=24):
 
 
 # ---------------------------------------------------------------- island: Dynamic Island expand
+ISLAND_SPLIT = 0.42  # fraction of the transition spent as a pill before it opens
+
+
+def _back(t, s=1.2):
+    """Ease-out with a small overshoot (~3 % at s=1.2), like an iOS spring."""
+    t = _clip(t) - 1
+    return 1 + (s + 1) * t ** 3 + s * t ** 2
+
+
 def _island_geom(q):
-    if q < 0.35:
-        e = _ease_out(q / 0.35)
-        hh = 15 + 11 * e
-        return 35 + 80 * e, hh, 40.0, hh
-    e = _ease_out((q - 0.35) / 0.65)
-    ov = 16 * math.sin(math.pi * _clip((q - 0.35) / 0.65))  # overshoot past the frame edge
+    """(half width, half height, centre y, corner radius, content opacity) of the island."""
+    if q < ISLAND_SPLIT:  # a black pill pops out of a dot at the top, then a live activity fades in
+        e = _back(q / ISLAND_SPLIT)
+        hh = 9 + 17 * e
+        return 9 + 106 * e, hh, 40.0, hh, _clip((q / ISLAND_SPLIT - 0.45) / 0.55) * 0.8
+    t = (q - ISLAND_SPLIT) / (1 - ISLAND_SPLIT)
+    e = _ease_out(t)
+    ov = 16 * math.sin(math.pi * _clip(t))  # overshoots past the frame edge, then settles
     return (115 + (W / 2 + ov - 115) * e, 26 + (W / 2 + ov - 26) * e, 40 + (W / 2 - 40) * e,
-            26 * (1 - e) + 4 * e)
+            26 * (1 - e) + 2, 0.8 + 0.2 * e)
 
 
 def island(a, b, p, dp):
@@ -81,22 +115,20 @@ def island(a, b, p, dp):
         g0, g1 = _island_geom(q0), _island_geom(q1)
         return max(abs(g1[0] - g0[0]), abs(g1[1] - g0[1]) + abs(g1[2] - g0[2]))
 
-    def at(q, keyline=False):
-        hw, hh, cy, r = _island_geom(q)
+    def at(q):
+        hw, hh, cy, r, op = _island_geom(q)
         d = rounded_box(W / 2, cy, hw, hh, r)
         m = _fill(d)
         s = max(2 * hw, 2 * hh) / W  # the shot fills the window, scaled with it
         M = np.float32([[s, 0, W / 2 - s * W / 2], [0, s, cy - s * W / 2]])
-        win = cv2.warpAffine(b, M, (W, W), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-        if q < 0.35:
-            win = win * 0.75
+        win = cv2.warpAffine(b, M, (W, W), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT) * op
         back = cv2.warpAffine(a, cv2.getRotationMatrix2D((W / 2, W / 2), 0, 1 - 0.05 * q), (W, W),
                               borderMode=cv2.BORDER_REFLECT) * (1 - 0.45 * q)
         shadow = cv2.GaussianBlur(m, (0, 0), 10)
         out = back * (1 - 0.6 * shadow)
         return out * (1 - m) + win * m
     out = _shutter(at, p, dp, travel=travel)
-    hw, hh, cy, r = _island_geom(p)  # sharp white keyline at the current edge, fading while it moves fast
+    hw, hh, cy, r, _ = _island_geom(p)  # sharp white keyline at the current edge, fading while it moves fast
     k = _keyline(rounded_box(W / 2, cy, hw, hh, r)) / (1 + travel(p - dp / 2, p + dp / 2) / 40)
     return out * (1 - k) + 0.96 * k
 
@@ -116,7 +148,13 @@ def strips(a, b, p, dp, n=6, stagger=0.1, span=0.45):
         else:           # from the bottom
             stack, start = np.vstack([a[:, xs], b[:, xs]]), W * e
         s0 = int(round(start))
-        col = stack[s0:s0 + W]
+        col = stack[s0:s0 + W].copy()
+        if 0 < q < 1:  # the incoming slat's leading edge: a white keyline, and a shadow on the slat it pushes out
+            edge = W * e if j % 2 == 0 else W * (1 - e)
+            y = np.arange(W, dtype=np.float32)[:, None]
+            ahead = (y - edge) if j % 2 == 0 else (edge - y)  # distance into the outgoing slat
+            col = col * (1 - 0.45 * np.exp(-np.clip(ahead, 0, None) / 14) * (ahead > 0))
+            col = np.maximum(col, 0.95 * (np.abs(ahead) < 1.5))
         speed = W * 3 * (1 - q) ** 2 / span * dp  # px travelled during the shutter
         L = int(min(0.5 * speed, 60))
         if 0 < q < 1 and L > 2:
@@ -130,43 +168,45 @@ def strips(a, b, p, dp, n=6, stagger=0.1, span=0.45):
 
 
 # ---------------------------------------------------------------- app close: iOS swipe-up into an icon
-def _app_geom(q, target, icon_w):
-    """(cx, cy, half size, corner radius, opacity) of the closing app card."""
+def _app_geom(q, target, icon):
+    """(cx, cy, half width, half height, corner radius, opacity) of the closing app card; `icon` is the
+    (width, height) of the icon it lands on, in frame pixels."""
     lift = W / 2 - 34
     if q < 0.3:   # picked up: shrinks a little and lifts, like the swipe-up gesture
         e = _ease_out(q / 0.3)
-        s, cx, cy, r = 1 - 0.14 * e, W / 2, W / 2 - 34 * e, 40 * e
-    else:         # flies into its icon on the home screen, shrinking to the icon's size
-        e = _smooth((q - 0.3) / 0.7)
-        s = 0.86 * (icon_w / W / 0.86) ** e
-        cx, cy = W / 2 + (target[0] - W / 2) * e, lift + (target[1] - lift) * e
-        r = 40 * s / 0.86
-    return cx, cy, s * W / 2, r, 1 - _clip((q - 0.78) / 0.22)
+        s = 1 - 0.14 * e
+        return W / 2, W / 2 - 34 * e, s * W / 2, s * W / 2, 40 * e, 1.0
+    e = _smooth((q - 0.3) / 0.7)  # flies into its icon on a slight arc, taking the icon's shape
+    hw = 0.43 * W * (icon[0] / (0.86 * W)) ** e
+    hh = 0.43 * W * (icon[1] / (0.86 * W)) ** e
+    cx = W / 2 + (target[0] - W / 2) * e
+    cy = lift + (target[1] - lift) * e - 44 * math.sin(math.pi * e)
+    return cx, cy, hw, hh, 40 * min(hw, hh) / (0.43 * W), 1 - _clip((q - 0.68) / 0.28)  # dissolves over 2 frames
 
 
-def app_close(a, b, p, dp, target, icon_w):
+def app_close(a, b, p, dp, target, icon):
     """The shot closes like an iPhone app: it shrinks into a rounded card, lifts, then flies into one of
     the icons on the next shot (the dark interlude's batteries play the home screen), which springs
     back into place behind it."""
     def travel(q0, q1):
-        g0, g1 = _app_geom(q0, target, icon_w), _app_geom(q1, target, icon_w)
-        return abs(g1[0] - g0[0]) + abs(g1[1] - g0[1]) + abs(g1[2] - g0[2])
+        g0, g1 = _app_geom(q0, target, icon), _app_geom(q1, target, icon)
+        return abs(g1[0] - g0[0]) + abs(g1[1] - g0[1]) + max(abs(g1[2] - g0[2]), abs(g1[3] - g0[3]))
 
     def at(q):
-        cx, cy, hw, r, op = _app_geom(q, target, icon_w)
+        cx, cy, hw, hh, r, op = _app_geom(q, target, icon)
         zb = 1.08 - 0.08 * _ease_out(q)  # home screen springs back from slightly zoomed in
         home = cv2.warpAffine(b, cv2.getRotationMatrix2D((W / 2, W / 2), 0, zb), (W, W), borderMode=cv2.BORDER_REFLECT)
         home = home * (0.55 + 0.45 * _ease_out(q))
-        size = max(2, int(round(2 * hw)))
-        small = cv2.resize(a, (size, size), interpolation=cv2.INTER_AREA)
-        M = np.float32([[2 * hw / size, 0, cx - hw], [0, 2 * hw / size, cy - hw]])
-        card = cv2.warpAffine(small, M, (W, W), flags=cv2.INTER_LINEAR, borderValue=0)
-        m = _fill(rounded_box(cx, cy, hw, hw, r)) * op
+        # the card shows the shot scaled to cover it (like an app snapshot), centre-cropped to its shape
+        s = 2 * max(hw, hh) / W
+        M = np.float32([[s, 0, cx - s * W / 2], [0, s, cy - s * W / 2]])
+        card = cv2.warpAffine(a, M, (W, W), flags=cv2.INTER_AREA if s < 1 else cv2.INTER_LINEAR, borderValue=0)
+        m = _fill(rounded_box(cx, cy, hw, hh, r)) * op
         shadow = cv2.GaussianBlur(m, (0, 0), 12)
         return home * (1 - 0.5 * shadow) * (1 - m) + card * m
     out = _shutter(at, p, dp, travel=travel)
-    cx, cy, hw, r, op = _app_geom(p, target, icon_w)
-    k = _keyline(rounded_box(cx, cy, hw, hw, r)) * op / (1 + travel(p - dp / 2, p + dp / 2) / 40)
+    cx, cy, hw, hh, r, op = _app_geom(p, target, icon)
+    k = _keyline(rounded_box(cx, cy, hw, hh, r)) * op / (1 + travel(p - dp / 2, p + dp / 2) / 40)
     return out * (1 - k) + 0.96 * k
 
 
@@ -246,7 +286,47 @@ def phone_wipe(a, b, p, dp, f, c, pre, post, name, scale, lean):
         x, y, s, ang = pose((t - (c - pre) + 0.5) / total)
         return x, y, s, ang, 1.0
     props.draw_moving(out, name, path, f, size=props.SIZE * 3, max_samples=12)
-    return out
+    # a highlight slides across the phone's glass as it passes
+    x, y, s, ang = pose(p)
+    lum, alpha, _ = props.load(name)
+    P = cv2.getRotationMatrix2D((alpha.shape[1] / 2, alpha.shape[0] / 2), ang, s)
+    P[0, 2] += x - alpha.shape[1] / 2
+    P[1, 2] += y - alpha.shape[0] / 2
+    body = cv2.warpAffine(cv2.erode(alpha, np.ones((9, 9), np.uint8)), P, (W, W), flags=cv2.INTER_LINEAR, borderValue=0)
+    return out + glare(body, 1 - p, width=0.09, strength=0.3)
+
+
+# ---------------------------------------------------------------- whip pan: both shots side by side
+def whip(a, b, p, dp, angle, tilt=0.0, punch=0.06, shutter=0.5, total=4, k=6.0):
+    """A real whip pan: the next shot sits just off-frame along the pan, and the camera rips from one to
+    the other. Both stay solid (no double exposure); the seam between them is soft and the motion blur
+    follows the pan. `angle` is the direction the picture travels (degrees, y down)."""
+    th = math.radians(angle)
+    ux, uy = math.cos(th), math.sin(th)
+    L = W / max(abs(ux), abs(uy))
+
+    def e_of(q):  # S-curve: nearly still at the ends, all the travel in the frames around the cut
+        return 0.5 + 0.5 * math.tanh(k * (_clip(q) - 0.5)) / math.tanh(k / 2)
+
+    def frame(q):
+        e = e_of(q)
+        z = 1 + punch * math.sin(math.pi * _clip(q))
+        rot = tilt * math.sin(math.pi * _clip(q))
+        tiles = []
+        for img, off in ((a, L * e), (b, -L * (1 - e))):
+            M = cv2.getRotationMatrix2D((W / 2, W / 2), rot, z)
+            M[0, 2] += ux * off * z
+            M[1, 2] += uy * off * z
+            tiles.append(cv2.warpAffine(img, M, (W, W), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT))
+        seam = L * (e - 0.5) * z  # boundary between the tiles, along the pan
+        side = (_XX - W / 2) * ux + (_YY - W / 2) * uy - seam
+        m = np.clip(side / 40 + 0.5, 0, 1)
+        return tiles[0] * m + tiles[1] * (1 - m)
+
+    out = frame(p)
+    de = 0.5 * k / math.cosh(k * (_clip(p) - 0.5)) ** 2 / math.tanh(k / 2)  # d e / d q
+    return _line_blur(out, min(L * de / total * shutter, 170), angle)
+
 
 
 # ---------------------------------------------------------------- portal: zoom into a phone's screen
@@ -298,7 +378,8 @@ def portal(a, b, f, c, pre, phone, pose, cam, dp_frames=0.8):
         shot = cv2.warpAffine(b, Mb, (W, W), flags=cv2.INTER_LINEAR, borderValue=0)  # black bars above/below
         m = _fill(rounded_box(tx, ty, sw * z / 2, sh * z / 2, sr * z, ang_out))
         on = max(0.0, 1 - (f - (c - pre)) / 2.0)  # the screen switches on with a flash
-        return out * (1 - m) + np.clip(shot + 0.6 * on, 0, 1) * m
+        screen = np.clip(shot + 0.6 * on, 0, 1) + glare(m, q, width=0.08, strength=0.28)  # light across the glass
+        return out * (1 - m) + screen * m
 
     q = (f - (c - pre) + 0.8) / pre
     return _shutter(at, q, dp_frames / pre, travel=travel, step=6.0)

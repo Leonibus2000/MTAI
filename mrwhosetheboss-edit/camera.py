@@ -45,7 +45,7 @@ def state(i, t):
     c0, c1 = shot["start"], shot["end"]
     n = c1 - c0
     k = t - c0
-    st = dict(logz=cam.get("push", 0.0) * k, rot=cam.get("rot0", 0.0) + cam.get("spin", 0.0) * k,
+    st = dict(logz=cam.get("zoom0", 0.0) + cam.get("push", 0.0) * k, rot=cam.get("rot0", 0.0) + cam.get("spin", 0.0) * k,
               tx=cam.get("pan", (0, 0))[0] * k, ty=cam.get("pan", (0, 0))[1] * k,
               focus=shot.get("focus", (W / 2, W / 2)), sigma=0.0, gain=1.0, lift=0.0, glitch=0.0,
               crash=0.0, crash_focus=(W / 2, W / 2))

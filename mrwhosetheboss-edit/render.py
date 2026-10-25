@@ -265,7 +265,10 @@ def behind(shot, f, k, img):
         place(img, *STRIPED, 520 - k * 0.5, 470, 0.75, -24)
     if "icon_field" in o:
         for i, (name, *_) in enumerate(FLOAT):
-            props.draw(img, name, *float_pose(i, f, k, shot["end"] - shot["start"]), soft=1.1)
+            x, y, s, ang = float_pose(i, f, k, shot["end"] - shot["start"])
+            if i == CUTS[shot["start"]].get("comp", {}).get("icon"):  # the icon the title shot closes into bounces
+                s *= 1 + 0.14 * math.sin(math.pi * min(max((k - 1.5) / 4, 0), 1))
+            props.draw(img, name, x, y, s, ang, soft=1.1)
 
     if "pixel_stairs" in o:
         for side in (0, 1):
@@ -435,6 +438,7 @@ def glitch(img, g, f):
 
 # ---------------------------------------------------------------- frame assembly
 SRC = None
+ONES = np.ones((W, W), np.float32)
 
 
 def compose(shot, src, f):
@@ -467,6 +471,13 @@ def photograph(i, srcs, f):
     """Shot i at frame f through its camera: motion blur, defocus, glitch, exposure."""
     shot = SHOTS[i]
     img, st = camera.shoot(compose(shot, srcs[i], f), i, f)
+    zoom = st["logz"] + st["crash"]
+    if zoom < -0.03:  # pulled back past the frame: the shot becomes a white-bordered card on black, not mirrored edges
+        w = min((-zoom - 0.03) / 0.05, 1.0)
+        cov = cv2.warpAffine(ONES, camera.matrix(st), (W, W), flags=cv2.INTER_LINEAR, borderValue=0)
+        key = np.clip(cv2.dilate(cov, np.ones((7, 7), np.uint8)) - cov, 0, 1)
+        card = img * cov + 0.03 * (1 - cov)
+        img = img * (1 - w) + (card * (1 - key) + 0.95 * key) * w
     if st["glitch"] > 0.01:
         img = glitch(img, st["glitch"], f)
     flicker = CUTS[shot["start"]].get("smear_in", {}).get(f - shot["start"])
@@ -507,6 +518,9 @@ def designed(comp, a, b, f, c, j_out, srcs):
         return transitions.portal(a, b, f, c, pre, FLY[comp["fly"]][0], (x, y, s, ang), cam)
     if kind == "phone_wipe":
         return transitions.phone_wipe(a, b, p, dp, f, c, pre, post, comp["phone"], comp["scale"], comp["lean"])
+    if kind == "whip":
+        return transitions.whip(a, b, p, dp, comp["angle"], comp.get("tilt", 0.0), comp.get("punch", 0.06),
+                                comp.get("shutter", 0.5), pre + post)
     if kind == "pop_in":
         return transitions.pop_in(a, b, p, dp, subject_matte((j_out + 1) % len(SHOTS), srcs, f))
     if kind == "app_close":  # the card lands on an icon of the incoming shot, found through its camera
@@ -515,8 +529,10 @@ def designed(comp, a, b, f, c, j_out, srcs):
         x, y, s, _ = float_pose(comp["icon"], f, max(f - shot["start"], 0), shot["end"] - shot["start"])
         cam = camera.matrix(camera.state(j_in, f))
         tx, ty = cam @ np.array([x, y, 1.0])
-        icon_w = props.load(FLOAT[comp["icon"]][0])[1].shape[1] * s * math.hypot(cam[0, 0], cam[0, 1])
-        return transitions.app_close(a, b, p, dp, (tx, ty), icon_w)
+        ys, xs = np.nonzero(props.load(FLOAT[comp["icon"]][0])[1] > 0.5)  # the icon's visible extent
+        k = s * math.hypot(cam[0, 0], cam[0, 1])
+        icon = ((xs.max() - xs.min()) * k * 0.92, (ys.max() - ys.min()) * k * 0.92)  # lands just inside it
+        return transitions.app_close(a, b, p, dp, (tx, ty), icon)
     return getattr(transitions, kind)(a, b, p, dp)
 
 

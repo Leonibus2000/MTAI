@@ -10,49 +10,49 @@ Camera numbers come from optical flow on the reference (`analyze_motion.py`): pe
 
 | Shot | Time | Frames | Reference content | Recreation (Mrwhosetheboss / tech) | Cutout | Camera in shot | Cut into this shot |
 |---|---|---|---|---|---|---|---|
-| S01 | 0.00–0.70s | 0–20 | Hikaru CU glaring, tilted white frame, striped rook stickers, halftone dot bg | Close-up, intense stare straight into lens (studio intro) | person | push +0.5%/f, spin +0.10°/f, tilt -3° | loop seam from S14: **Dynamic Island expand** (2 frames before / 4 after); in: push 0.05; shake 10px |
+| S01 | 0.00–0.70s | 0–20 | Hikaru CU glaring, tilted white frame, striped rook stickers, halftone dot bg | Close-up, intense stare straight into lens (studio intro) | person | push +0.5%/f, spin +0.10°/f, tilt -3° | loop seam from S14: **Dynamic Island** (3 frames before / 4 after); in: push 0.05; shake 10px |
 | S02 | 0.70–1.30s | 21–38 | Hikaru ECU, heavy posterize + halftone, tilted frame, pixel-stair edge graphics | Extreme close-up of face, serious / unimpressed expression | person (erase) | push +0.2%/f, spin +0.45°/f, tilt -2° | **sliding slats** (2 frames before / 3 after); in: push 0.06; shake 12px |
-| S03 | 1.30–1.83s | 39–54 | Hikaru pointing, checkerboard bg, white outline | Medium shot, pointing a finger / gesturing at camera | person | push +1.0%/f, spin -0.60°/f, tilt 2° | out: pull 0.3/4f; in: whip 90 @128°/2f; in: push 0.25; flash 0.22; shake 14px; 2-frame overlap |
-| S04 | 1.83–2.33s | 55–69 | Hikaru with glasses, hand on chin, diagonal stripe bg | Thinking pose, hand on chin, looking off-camera | person | push +0.4%/f, spin -0.30°/f, tilt 1°, exposure (0.7, 0.5) | out: whip 150 @36°/4f; out: zoom 0.16/3f; in: whip 50 @36°/2f; in: push 0.14; shake 12px; 2-frame overlap |
+| S03 | 1.30–1.83s | 39–54 | Hikaru pointing, checkerboard bg, white outline | Medium shot, pointing a finger / gesturing at camera | person | push +1.0%/f, spin -0.60°/f, tilt 2° | out: pull 0.3/4f; **stitched whip pan** @128° (1 frame before / 2 after); in: push 0.25; flash 0.22; shake 14px |
+| S04 | 1.83–2.33s | 55–69 | Hikaru with glasses, hand on chin, diagonal stripe bg | Thinking pose, hand on chin, looking off-camera | person | push +0.4%/f, spin -0.30°/f, tilt 1°, exposure (0.7, 0.5) | out: zoom 0.16/3f; **stitched whip pan** @36° (2 frames before / 2 after); in: push 0.14; shake 12px |
 | S05 | 2.33–3.37s | 70–100 | Hikaru hand over mouth; glitch cut in, 'HIKARU the' flickers on, 'GREAT' lands f80; icons pop at f89 | Hand over mouth / leaning in, mid close-up | person | push +0.4%/f, spin -0.40°/f, exposure (0.7, 0.9), zoom-in to (20, 150) at f78–83 and hold | out: next shot smears in from the right over the last 3f; in: push 0.03; in: 3-frame smear/echo flicker; shake 10px |
 | S06 | 3.37–4.40s | 101–131 | Dark bg, floating stickers (rocket, bolt, stopwatch); two hands fly in at f116 | Real photos of batteries drifting; two real phones whip in from the sides instead of hands | – | push +0.0%/f, spin +0.12°/f, exposure 0.75 | **iOS app close** (2 frames before / 4 after); shake 6px |
 | S07 | 4.40–4.97s | 132–148 | Hikaru looking down, 'MUHMA' pixel badge on gem sticker, icons orbit | Close-up, side-eye at a phone / product in hand | held (add) | push +0.3%/f, spin -0.30°/f, exposure 0.7 | **dive into the phone screen** (5 frames before / 0 after); in: push 0.08; shake 8px |
-| S08 | 4.97–5.63s | 149–168 | Hikaru profile looking up, hand on chin, chessboard bg, inner hand outline | Profile / three-quarter, looking up, finger on chin | person | push +1.7%/f, spin +0.30°/f, tilt -2°, exposure 0.85 | out: whip 90 @40°/2f; out: spin -3/2f; in: whip 45 @40°/2f; shake 12px; 2-frame overlap |
+| S08 | 4.97–5.63s | 149–168 | Hikaru profile looking up, hand on chin, chessboard bg, inner hand outline | Profile / three-quarter, looking up, finger on chin | person | push +1.7%/f, spin +0.30°/f, tilt -2°, exposure 0.85 | **stitched whip pan** @40° (2 frames before / 2 after); shake 12px |
 | S09 | 5.63–6.07s | 169–181 | Hikaru hands clasped, repeated 'GENIUS' text wall bg | Hands clasped under chin, focused stare | held (add) | push +0.0%/f, spin +0.00°/f, exposure (0.75, 0.95) | **sticker pop-in** (3 frames before / 2 after); shake 14px |
-| S10 | 6.07–6.67s | 182–199 | Torn-paper diagonal split with halftone; circular sticker zooms through at f196 | Close-up reaction, shocked / surprised face | held (inpaint) | push +0.4%/f, spin +0.25°/f, exposure 1.5 | out: zoom 0.4/4f; out: spin 7/4f; in: push 0.32; shake 14px; 2-frame overlap |
+| S10 | 6.07–6.67s | 182–199 | Torn-paper diagonal split with halftone; circular sticker zooms through at f196 | Close-up reaction, shocked / surprised face | held (inpaint) | push +0.4%/f, spin +0.25°/f, exposure 1.5 | out: zoom 0.4/4f; out: spin 7/4f; in: push 0.16; flash 0.15; shake 9px |
 | S11 | 6.67–7.33s | 200–219 | Hikaru at board; camera crash-zooms into the board f213-218 | At desk with phones / unboxing, looking at a device | person | push +0.8%/f, spin -0.10°/f, exposure (1.1, 1.25) | **real-phone wipe** (3 frames before / 3 after); shake 12px |
-| S12 | 7.33–7.93s | 220–237 | Two players at angled board, white outlines | Holding a phone up to camera / comparing two phones | held (add, erase) | push +1.5%/f, spin +0.45°/f, tilt -2°, exposure 0.85 | out: crash 0.7/7f; out: whip 200 @0°/5f; out: bright 0.4/6f; in: whip 70 @0°/5f; shake 10px; 2-frame overlap |
-| S13 | 7.93–8.33s | 238–249 | Hikaru big smile, LED light-bar bg, outline | Big genuine smile / laugh, close-up | person | push +0.3%/f, spin +0.30°/f, exposure 1.2 | out: whip 170 @270°/5f; out: zoom 0.3/5f; in: push 0.2; shake 14px; 2-frame overlap |
-| S14 | 8.33–8.73s | 250–261 | Hikaru holding board, chess-piece backdrop, end blur | Outro: holding a product, phone wall behind | held (add) | push +1.6%/f, spin -0.50°/f, exposure 1.15 | out: pull 0.38/5f; out: spin 7/5f; out: whip 50 @139°/2f; in: push 0.08; shake 12px; 2-frame overlap |
+| S12 | 7.33–7.93s | 220–237 | Two players at angled board, white outlines | Holding a phone up to camera / comparing two phones | held (add, erase) | push +1.5%/f, spin +0.45°/f, tilt -2°, exposure 0.85 | out: crash 0.55/5f; out: bright 0.2/4f; **stitched whip pan** @0° (2 frames before / 2 after); shake 10px |
+| S13 | 7.93–8.33s | 238–249 | Hikaru big smile, LED light-bar bg, outline | Big genuine smile / laugh, close-up | person | push +0.3%/f, spin +0.30°/f, exposure 1.2 | out: zoom 0.3/5f; **stitched whip pan** @270° (2 frames before / 2 after); in: push 0.2; shake 14px |
+| S14 | 8.33–8.73s | 250–261 | Hikaru holding board, chess-piece backdrop, end blur | Outro: holding a product, phone wall behind | held (add) | push +1.6%/f, spin -0.50°/f, exposure 1.15 | out: pull 0.38/5f; out: spin 7/5f; **stitched whip pan** @139° (1 frame before / 2 after); in: push 0.08; shake 12px |
 
 ## Camera and transitions (`camera.py`)
 
 Every shot has one continuous camera path, and every frame is rendered by sampling that path at up to 28 instants inside an 0.8-frame shutter. Motion blur therefore follows the real motion: radial for zooms, arcs for spins, streaks for whips.
 
-- **Exits** accelerate into the cut (u²): zoom-in, pull-back, whip, spin, crash zoom on a point, defocus, exposure dip or brightening, glitch.
+- **Exits** accelerate into the cut (u²): zoom-in, pull-back, whip, spin, crash zoom on a point, defocus, exposure dip or brightening, glitch. A pull-back past the frame edge turns the shot into a white-bordered card on black, instead of showing mirrored edges.
 - **Arrivals** decelerate out of the cut (v²): whip settle, spin settle, defocus clear, lens sticker exit, and *push*/*pull* zoom settles. The reference measures +4–8 %/frame of zoom right after most cuts, decaying over about 5 frames.
-- **Splice:** moves are centred half a frame before the first new frame. On motion cuts the last old frame and the first new frame each blend 24% of the other shot, both mid-move.
+- **Splice:** moves are centred half a frame before the first new frame. Whip cuts are **stitched whip pans** (`transitions.whip`): the next shot sits just off-frame along the pan and the camera rips from one to the other on an S-curve, so nearly all the travel happens in the 1–2 frames around the cut. Both shots stay solid (a 40 px soft seam, no double exposure), and the motion blur follows the pan.
 - **In-shot moves:** `zoom_to` pushes into a point of the shot and holds there; `jolt` is a fast out-and-back move that streaks both ways in 2 frames.
 - **Hold motion:** a steady push-in (0–1.7 %/frame) and rotation drift (up to ±0.6°/frame). Handheld jitter is a Catmull-Rom spline through random targets, so it is continuous and blurs. Its amplitude bursts on each cut and each music onset, then decays.
 - **Exposure** is a tone curve. Below 1 it darkens midtones but keeps highlights, so dark sections stay contrasty instead of turning muddy grey. Above 1 it lifts midtones but keeps black.
 
 ### Transitions that depart from the reference (`transitions.py`)
 
-Six cuts use transitions the reference doesn't have, mostly built from the real phone photos, and four
-of the remaining whips run in other directions (55: up-right instead of down-left; 149: up-right with the
-spin reversed; 220: right instead of left; 238: up instead of left). They still land on the same
-music hits. Each one blends both shots across the cut. Fast geometry gets motion blur from averaging
-up to 24 instants inside the shutter (the count adapts to how far the edges travel), so it blurs
-instead of ghosting.
+Six cuts use transitions the reference doesn't have, mostly built from the real phone photos. The six
+whip cuts are stitched whip pans, four of them in new directions (55: up-right instead of down-left;
+149: up-right with a tilt; 220: right instead of left; 238: up instead of left). They still land on the
+same music hits. Each designed transition blends both shots across the cut. Fast geometry gets motion
+blur from averaging up to 24 instants inside the shutter (the count adapts to how far the edges travel),
+so it blurs instead of ghosting. Phone screens catch a moving glass highlight.
 
 | Cut | Reference | This edit |
 |---|---|---|
-| 0.00 s (loop seam) | whip in from the top right | **Dynamic Island:** S01 plays in a pill at the top of the screen, then the pill expands into the frame over the dimming outro |
-| 0.70 s | zoom into the face, hard cut | **Sliding slats:** six vertical slats; alternate ones slide the next shot in from the top and the bottom, staggered left to right, with white seams |
-| 3.37 s | pull back, defocus | **iOS app close:** the title shot shrinks into a rounded card like a closing app, lifts, and flies into the 9V battery, one of the three "icons" on the dark interlude that plays the home screen, which springs back behind it |
-| 4.40 s | defocus dip | **Dive into the phone screen:** the MTD shot starts playing on the screen of the iPhone at the left edge (it flashes on), then the camera dives in until the screen fills the frame |
+| 0.00 s (loop seam) | whip in from the top right | **Dynamic Island:** a black pill pops out of a dot at the top of the outro with a small overshoot, S01 fades in inside it like a Live Activity, then it opens into the full frame over 3 frames and overshoots the edge slightly |
+| 0.70 s | zoom into the face, hard cut | **Sliding slats:** six vertical slats; alternate ones slide the next shot in from the top and the bottom, staggered left to right, with white seams. Each incoming slat has a white leading edge and casts a shadow on the slat it pushes out |
+| 3.37 s | pull back, defocus | **iOS app close:** the title shot shrinks into a rounded card like a closing app and lifts. It then flies on a slight arc into the 9V battery, one of the three "icons" on the dark interlude that plays the home screen. On the way it takes the icon's wide shape, then dissolves into it over 2 frames as the icon bounces and the home screen springs back |
+| 4.40 s | defocus dip | **Dive into the phone screen:** the MTD shot starts playing on the screen of the iPhone at the left edge (it flashes on), then the camera dives in until the screen fills the frame; a highlight sweeps across the glass during the dive |
 | 5.63 s | 32° spin-out | **Sticker pop-in:** the next shot's Arun pops up from the bottom as a white-bordered cut-out sticker at 70% size, in front of the profile shot, which racks out of focus and dims behind him. On the music hit he punches in to full size as his own background slams in with a white flash and a camera jolt |
-| 6.67 s | magnifier sticker zoom-through | **Real-phone wipe:** a giant Galaxy S6 Edge slams in from the right, pauses mid-frame over the cut like a product shot, then shoots out left; the next shot is revealed behind it |
+| 6.67 s | magnifier sticker zoom-through | **Real-phone wipe:** a giant Galaxy S6 Edge slams in from the right, pauses mid-frame over the cut like a product shot, then shoots out left; the next shot is revealed behind it; a highlight slides across its glass as it passes |
 
 ### The S04 → S05 glitch cut (2.33 s)
 
