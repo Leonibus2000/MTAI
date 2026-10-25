@@ -8,7 +8,14 @@
     "license_url": "https://creativecommons.org/licenses/by/2.0/",
     "page": "https://www.flickr.com/photos/83136374@N05/50535468262",
     "download": "https://api.openverse.org/v1/images/27b77508-0c1d-409e-902c-b28ff31c0cc3/thumb/?full_size=true",
-    "source": "flickr"
+    "source": "flickr",
+    "screen": [
+      0.115,
+      0.065,
+      0.885,
+      0.942,
+      0.087
+    ]
   },
   "phone_iphone_modern": {
     "kind": "phone",

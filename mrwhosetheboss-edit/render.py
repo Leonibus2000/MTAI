@@ -21,6 +21,7 @@ import camera
 import cutout
 import gfx
 import props
+import transitions
 from gfx import W, place, sticker
 from timeline import CUTS, FPS, N_FRAMES, SHOTS
 
@@ -197,7 +198,7 @@ def outline(mask, k, width=6):
 
 
 # ---------------------------------------------------------------- overlays
-STK = {k: sticker(k, 200) for k in ["phone_back", "lens", "cpu_badge"]}
+STK = {k: sticker(k, 200) for k in ["phone_back", "cpu_badge"]}
 STRIPED = gfx.striped_phone(300)
 TITLE_TOP = gfx.glow_title([("ARUN", 1.0), ("the", 0.72)], size=90)
 TITLE_BOSS = gfx.glow_title([("BOSS", 1.0)], size=90)
@@ -217,6 +218,18 @@ FLY_AT = 115
 FLY = [("phone_iphone12pro_standing", -1, 330, 1.3, -12), ("phone_galaxy_s7_front", 1, 300, 1.32, 53)]  # tops lean in
 # S07: two small props flanking the MTD badge in front of him (the reference has a stopwatch and a rocket there)
 FLANK = [("battery_powerbank_silver", 122, 330, 0.36, 24), ("battery_duracell_aa_vertical", 462, 330, 0.34, -18)]
+
+
+def fly_pose(idx, t):
+    """Pose (x, y, scale, angle, opacity) of interlude phone `idx` at time t: whips in from the side over
+    2.5 frames, then holds at the frame edge with a slight sway."""
+    name, side, y, s, ang = FLY[idx]
+    u = t - FLY_AT
+    if u < 0:
+        return 288 + side * 560, y, s, ang, 0.0
+    p = 1 - (1 - min(u / 2.5, 1)) ** 3
+    x = 288 + side * (560 - 340 * p) + side * 7 * math.sin(u * 0.7)
+    return x, y + 6 * math.cos(u * 0.6 + side), s, ang + 3 * math.sin(u * 0.5 + side), 1.0
 
 
 def ease(t):
@@ -258,21 +271,14 @@ def behind(shot, f, k, img):
 
 
 def front(shot, f, k, img):
-    o, n = shot["overlays"], shot["end"] - shot["start"]
+    o = shot["overlays"]
     if "tilt_rect" in o:
         draw_rect_outline(img, 205, 215, 330, 330, -22 + k * 0.3)
     if "tilt_rect2" in o:
         draw_rect_outline(img, 300, 260, 560, 470, 6 - k * 0.2)
     if "phones_fly_in" in o and f >= FLY_AT - 1:
-        for name, side, y, s, ang in FLY:
-            def path(t, side=side, y=y, s=s, ang=ang):
-                u = t - FLY_AT
-                if u < 0:
-                    return 288 + side * 560, y, s, ang, 0.0
-                p = 1 - (1 - min(u / 2.5, 1)) ** 3  # whips in over 2.5 frames, then holds at the edge
-                x = 288 + side * (560 - 340 * p) + side * 7 * math.sin(u * 0.7)
-                return x, y + 6 * math.cos(u * 0.6 + side), s, ang + 3 * math.sin(u * 0.5 + side), 1.0
-            props.draw_moving(img, name, path, f)
+        for idx, (name, *_) in enumerate(FLY):
+            props.draw_moving(img, name, lambda t, idx=idx: fly_pose(idx, t), f)
     if "icon_orbit" in o:
         for i, (name, x, y, s, ang) in enumerate(FLANK):
             pop = (0.5, 1.12)[k] if k < 2 else 1.0
@@ -290,9 +296,6 @@ def front(shot, f, k, img):
         place(img, wl, wa, 288, 340, s * 0.95, 0)
     if "tear" in o:
         tear(img, k)
-    if "lens_zoom" in o and k >= n - 4:
-        kk = k - (n - 4)
-        place(img, *STK["lens"], 300, 300, 0.4 * (2.2 ** kk), 40 + kk * 25)
     if "crash_zoom" in o and isinstance(SRC, Placeholder):  # give the crash zoom a device to land on
         place(img, *STK["phone_back"], 360, 430, 0.8, 70)
     if "held_phone" in o and isinstance(SRC, Placeholder):
@@ -382,23 +385,6 @@ def line_blur(img, length, ang):
     return cv2.filter2D(img, -1, k / k.sum(), borderType=cv2.BORDER_REFLECT)
 
 
-LENS_MAX = 0.4 * 2.2 ** 3  # lens sticker scale on the last frame before the cut
-
-
-def lens_exit(img, d):
-    """Lens sticker that covered the previous cut flies off the incoming shot (d: 1 at the cut .. 0 gone)."""
-    if d < 0.02:
-        return img
-    l, a = STK["lens"]
-    tmp, al = np.zeros_like(img), np.zeros_like(img)
-    s = LENS_MAX * d + 1.5 * (1 - d)
-    x, y = 300 + 270 * (1 - d), 300 - 280 * (1 - d)
-    place(tmp, l, a, x, y, s, 140 - 40 * d)
-    place(al, np.ones_like(a), a, x, y, s, 140 - 40 * d)
-    tmp, al = line_blur(tmp, 50, -50), line_blur(al, 50, -50)
-    return img * (1 - al) + tmp
-
-
 def wipe_in(img, nxt, cover, smear, f):
     """The next shot smears in from the right edge over `cover` of the frame, behind a ragged soft seam."""
     edge = W * (1 - cover) + cv2.resize(np.random.default_rng(f).standard_normal((12, 1)).astype(np.float32),
@@ -473,13 +459,11 @@ def compose(shot, src, f):
 
 
 def photograph(i, srcs, f):
-    """Shot i at frame f through its camera: motion blur, defocus, glitch, lens wipe, exposure."""
+    """Shot i at frame f through its camera: motion blur, defocus, glitch, exposure."""
     shot = SHOTS[i]
     img, st = camera.shoot(compose(shot, srcs[i], f), i, f)
     if st["glitch"] > 0.01:
         img = glitch(img, st["glitch"], f)
-    if st["lens"] > 0.01:
-        img = lens_exit(img, st["lens"])
     flicker = CUTS[shot["start"]].get("smear_in", {}).get(f - shot["start"])
     if flicker:
         img = smear(img, **flicker)
@@ -498,12 +482,33 @@ def neighbour(j, srcs, f):
     return photograph(j, srcs, f)
 
 
+def designed(comp, a, b, f, c, j_out):
+    """One of the designed transitions (transitions.py) at frame f of the cut at frame c."""
+    pre, post = comp["pre"], comp.get("post", 0)
+    p = (f - (c - pre) + 0.5) / (pre + post)
+    dp = 0.8 / (pre + post)  # shutter, as a fraction of the transition
+    kind = comp["type"]
+    if kind == "portal":
+        x, y, s, ang, _ = fly_pose(comp["fly"], f)
+        cam = camera.matrix(camera.state(j_out % len(SHOTS), f))
+        return transitions.portal(a, b, f, c, pre, FLY[comp["fly"]][0], (x, y, s, ang), cam)
+    if kind == "phone_wipe":
+        return transitions.phone_wipe(a, b, p, dp, f, c, pre, post, comp["phone"], comp["scale"], comp["lean"])
+    if kind == "mosaic":
+        return transitions.mosaic(a, b, p)
+    return getattr(transitions, kind)(a, b, p, dp)
+
+
 def render_frame(i, srcs, f):
     shot = SHOTS[i]
     c0, c1 = shot["start"], shot["end"]
+    into, out_of = CUTS[c0], CUTS[c1]
+    if "comp" in out_of and f >= c1 - out_of["comp"]["pre"]:
+        return finish(designed(out_of["comp"], photograph(i, srcs, f), neighbour(i + 1, srcs, f), f, c1, i), f)
+    if "comp" in into and f < c0 + into["comp"].get("post", 0):
+        return finish(designed(into["comp"], neighbour(i - 1, srcs, f), photograph(i, srcs, f), f, c0, i - 1), f)
     img = photograph(i, srcs, f)
     # two-frame overlap across motion cuts: both shots streaking at once hides the splice
-    into, out_of = CUTS[c0], CUTS[c1]
     if f == c0 and into.get("exit") and into.get("overlap", True):
         img = 0.76 * img + 0.24 * neighbour(i - 1, srcs, f)
     if f == c1 - 1 and out_of.get("exit") and out_of.get("overlap", True):

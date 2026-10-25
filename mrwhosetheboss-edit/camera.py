@@ -47,7 +47,7 @@ def state(i, t):
     k = t - c0
     st = dict(logz=cam.get("push", 0.0) * k, rot=cam.get("rot0", 0.0) + cam.get("spin", 0.0) * k,
               tx=cam.get("pan", (0, 0))[0] * k, ty=cam.get("pan", (0, 0))[1] * k,
-              focus=shot.get("focus", (W / 2, W / 2)), sigma=0.0, gain=1.0, lift=0.0, glitch=0.0, lens=0.0,
+              focus=shot.get("focus", (W / 2, W / 2)), sigma=0.0, gain=1.0, lift=0.0, glitch=0.0,
               crash=0.0, crash_focus=(W / 2, W / 2))
     ex = cam.get("exposure", 1.0)
     st["gain"] = ex[0] + (ex[1] - ex[0]) * min(max(k / max(n - 1, 1), 0), 1) if isinstance(ex, tuple) else ex
@@ -72,8 +72,6 @@ def state(i, t):
         elif kind == "defocus":
             st["sigma"] += p["sigma"] * e
             st["gain"] *= 1 - p.get("dark", 0.35) * min(e, 1)
-        elif kind == "lens":
-            st["lens"] = max(st["lens"], v ** 3)
 
     for kind, p in CUTS.get(c1, {}).get("exit", []):
         u = (t - (c1 - 0.5 - p["frames"])) / p["frames"]

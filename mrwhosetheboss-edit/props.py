@@ -25,10 +25,12 @@ _cache = {}
 META = json.load(open(os.path.join(HERE, "props.json")))
 
 
-def load(name):
-    """(lum, alpha, shadow) arrays for prop `name`, all SIZE-bounded."""
-    if name in _cache:
-        return _cache[name]
+def load(name, size=SIZE):
+    """(lum, alpha, shadow) arrays for prop `name`, bounded by `size` px (SIZE unless a close-up needs more).
+    The layout scales with `size`, so positions given as fractions of the prop (props.json "screen")
+    hold at any size."""
+    if (name, size) in _cache:
+        return _cache[(name, size)]
     path = os.path.join(PROPS_DIR, name + ".jpg")
     bgr = cv2.imread(path)
     if bgr is None:
@@ -46,29 +48,41 @@ def load(name):
     y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
     gray = cv2.cvtColor(bgr[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
     m = m[y0:y1, x0:x1]
-    inner = SIZE - 2 * (BORDER + 3)
+    border = BORDER * size / SIZE
+    pad = int(round((BORDER + 3) * size / SIZE))
+    inner = size - 2 * pad
     k = inner / max(gray.shape)
-    size = (max(1, int(round(gray.shape[1] * k))), max(1, int(round(gray.shape[0] * k))))
-    gray = cv2.resize(gray, size, interpolation=cv2.INTER_AREA)
-    m = cv2.resize(m, size, interpolation=cv2.INTER_AREA)
+    dims = (max(1, int(round(gray.shape[1] * k))), max(1, int(round(gray.shape[0] * k))))
+    gray = cv2.resize(gray, dims, interpolation=cv2.INTER_AREA)
+    m = cv2.resize(m, dims, interpolation=cv2.INTER_AREA)
     # photographic B&W: gentle S-curve, a touch of local contrast, no posterising (keeps it a photo)
     gray = np.clip((gray - 0.5) * 1.2 + 0.5, 0, 1)
     gray = np.clip(gray + 0.3 * (gray - cv2.GaussianBlur(gray, (0, 0), 2)), 0, 1)
-    pad = BORDER + 3
     gray = cv2.copyMakeBorder(gray, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
     m = cv2.copyMakeBorder(m, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
-    ring = cv2.dilate((m > 0.5).astype(np.float32),
-                      cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * BORDER + 1, 2 * BORDER + 1)))
-    ring = np.clip(cv2.GaussianBlur(ring, (0, 0), 0.9), 0, 1)
+    rb = int(round(border))
+    ring = cv2.dilate((m > 0.5).astype(np.float32), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * rb + 1, 2 * rb + 1)))
+    ring = np.clip(cv2.GaussianBlur(ring, (0, 0), 0.9 * size / SIZE), 0, 1)
     lum = gray * m + 0.95 * (1 - m)          # white border where the ring extends past the object
-    shadow = cv2.GaussianBlur(ring, (0, 0), 6)
-    _cache[name] = (lum.astype(np.float32), ring.astype(np.float32), shadow.astype(np.float32))
-    return _cache[name]
+    shadow = cv2.GaussianBlur(ring, (0, 0), 6 * size / SIZE)
+    _cache[(name, size)] = (lum.astype(np.float32), ring.astype(np.float32), shadow.astype(np.float32))
+    return _cache[(name, size)]
 
 
-def draw(dst, name, x, y, scale, angle=0.0, opacity=1.0, soft=0.0):
-    """Prop with its shadow, centred at (x, y). `soft` blurs it slightly (out-of-focus props)."""
-    lum, alpha, shadow = load(name)
+def upright(name):
+    """Rotation (degrees, OpenCV sense) that stands the prop's long axis vertical."""
+    _, alpha, _ = load(name)
+    ys, xs = np.nonzero(alpha > 0.5)
+    w, v = np.linalg.eigh(np.cov(np.stack([xs - xs.mean(), ys - ys.mean()])))
+    phi = np.degrees(np.arctan2(v[1, np.argmax(w)], v[0, np.argmax(w)])) % 180
+    return float((phi - 90 + 90) % 180 - 90)
+
+
+def draw(dst, name, x, y, scale, angle=0.0, opacity=1.0, soft=0.0, size=SIZE):
+    """Prop with its shadow, centred at (x, y). `scale` is relative to SIZE whatever `size` the prop is
+    loaded at (a bigger `size` only adds detail for props drawn large). `soft` blurs it slightly."""
+    lum, alpha, shadow = load(name, size)
+    scale = scale * SIZE / size
     if soft > 0.2:
         lum, alpha = cv2.GaussianBlur(lum, (0, 0), soft), cv2.GaussianBlur(alpha, (0, 0), soft)
     sx, sy, strength = SHADOW
@@ -76,17 +90,17 @@ def draw(dst, name, x, y, scale, angle=0.0, opacity=1.0, soft=0.0):
     place(dst, lum, alpha, x, y, scale, angle, opacity)
 
 
-def draw_moving(dst, name, path, t, shutter=0.8, step=3.0, max_samples=10, soft=0.0):
+def draw_moving(dst, name, path, t, shutter=0.8, step=3.0, max_samples=10, soft=0.0, size=SIZE):
     """Prop following path(t) -> (x, y, scale, angle, opacity), motion-blurred over the shutter."""
     a, b = path(t - shutter / 2), path(t + shutter / 2)
     travel = max(abs(a[0] - b[0]), abs(a[1] - b[1]), abs(a[2] - b[2]) * SIZE, abs(a[3] - b[3]) * SIZE / 60)
     n = int(min(max(np.ceil(travel / step), 1), max_samples))
     if n == 1:
-        draw(dst, name, *path(t), soft=soft)
+        draw(dst, name, *path(t), soft=soft, size=size)
         return
     acc = np.zeros_like(dst)
     for tt in np.linspace(t - shutter / 2, t + shutter / 2, n):
         layer = dst.copy()
-        draw(layer, name, *path(tt), soft=soft)
+        draw(layer, name, *path(tt), soft=soft, size=size)
         acc += layer
     dst[:] = acc / n

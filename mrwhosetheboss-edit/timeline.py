@@ -68,7 +68,7 @@ SHOTS = [
          cam=dict(push=0.0, shake=1.5, exposure=(0.75, 0.95))),
     dict(id="S10", start=182, framing="cu", need="Close-up reaction, shocked / surprised face",
          ref="Torn-paper diagonal split with halftone; circular sticker zooms through at f196",
-         look=dict(poster=4, halftone=0.55), bg="dots", overlays=["tear", "lens_zoom"], cutout="held",
+         look=dict(poster=4, halftone=0.55), bg="dots", overlays=["tear"], cutout="held",
          inpaint=dict(hue=(80, 112), sat=90, val=170, region=[(0, 470), (576, 430), (576, 576), (0, 576)]),
          cam=dict(push=0.004, spin=0.25, shake=1.5, exposure=1.5)),
     dict(id="S11", start=200, framing="ms", need="At desk with phones / unboxing, looking at a device",
@@ -107,46 +107,45 @@ for i, s in enumerate(SHOTS):
 #   push = arrival zoom-in that settles (amount, time constant T), pull = starts zoomed in and backs out
 #   shake = jitter burst (px) fired at the cut, flash = white lift, overlap = 2-frame streaked blend
 #   wipe = next shot smeared in from the right before the cut (cover fraction and smear px per frame)
+#   comp = a designed transition from transitions.py instead of a camera move (pre/post frames around the cut)
 #   smear_in = per-frame horizontal smear / echo / darkening of the new shot's first frames
 CUTS = {
-    0: dict(arrive=[("whip", dict(frames=4, angle=128, dist=150)), ("push", dict(amount=0.03, T=5))], shake=14),
-    21: dict(exit=[("zoom", dict(frames=5, amount=0.55))],
-             arrive=[("push", dict(amount=0.06, T=5))], shake=12),
+    # Where the edit departs from the reference: designed transitions (transitions.py) replace its most
+    # recognisable cuts - the opening whip, the zoom-in, the spin-out, the defocus dip, the magnifier
+    # zoom-through - and the remaining whips run in other directions.
+    0: dict(comp=dict(type="island", pre=2, post=4), arrive=[("push", dict(amount=0.05, T=5))], shake=10),
+    21: dict(comp=dict(type="strips", pre=2, post=3), arrive=[("push", dict(amount=0.06, T=5))], shake=12),
     39: dict(exit=[("pull", dict(frames=4, amount=0.30))],
              arrive=[("whip", dict(frames=2, angle=128, dist=90)), ("push", dict(amount=0.25, T=5))],
              flash=0.22, shake=14),
-    55: dict(exit=[("whip", dict(frames=4, angle=144, dist=150)), ("zoom", dict(frames=3, amount=0.16))],
-             arrive=[("whip", dict(frames=2, angle=144, dist=50)), ("push", dict(amount=0.14, T=6))], shake=12),
+    55: dict(exit=[("whip", dict(frames=4, angle=36, dist=150)), ("zoom", dict(frames=3, amount=0.16))],
+             arrive=[("whip", dict(frames=2, angle=36, dist=50)), ("push", dict(amount=0.14, T=6))], shake=12),
     # Reference: the next shot smears in from the right over the last 3 frames, then flickers for 4.
     70: dict(wipe=dict(cover=(0.22, 0.42, 0.64), smear=(40, 64, 90)),
              smear_in={0: dict(blur=22, echo=(40, 0.45)), 1: dict(blur=48, echo=(56, 0.4), dark=0.72),
                        2: dict(blur=14, echo=(26, 0.35))},
              arrive=[("push", dict(amount=0.03, T=4))], shake=10),
-    101: dict(exit=[("pull", dict(frames=2, amount=0.06))],
-              arrive=[("defocus", dict(frames=5, sigma=7))], overlap=False),
-    132: dict(exit=[("defocus", dict(frames=3, sigma=10)), ("dip", dict(frames=3, amount=0.4))],
-              arrive=[("defocus", dict(frames=3, sigma=8)), ("pull", dict(amount=0.10, T=3))],
-              overlap=False, shake=6),
-    149: dict(exit=[("whip", dict(frames=2, angle=140, dist=90)), ("spin", dict(frames=2, deg=3))],
-              arrive=[("whip", dict(frames=2, angle=140, dist=45))], shake=12),
-    169: dict(exit=[("spin", dict(frames=4, deg=-32)), ("zoom", dict(frames=4, amount=0.25)),
-                    ("whip", dict(frames=4, angle=90, dist=80))],
-              arrive=[("pull", dict(amount=0.30, T=4)), ("spin", dict(frames=5, deg=-5))], shake=10),
+    101: dict(comp=dict(type="crt", pre=3, post=3), shake=6),
+    # dive into the screen of the iPhone at the left edge of the interlude, where the MTD shot is playing
+    132: dict(comp=dict(type="portal", pre=5, fly=0), arrive=[("push", dict(amount=0.08, T=3))], shake=8),
+    149: dict(exit=[("whip", dict(frames=2, angle=40, dist=90)), ("spin", dict(frames=2, deg=-3))],
+              arrive=[("whip", dict(frames=2, angle=40, dist=45))], shake=12),
+    169: dict(comp=dict(type="mosaic", pre=3, post=3), shake=8),
     182: dict(exit=[("zoom", dict(frames=4, amount=0.40)), ("spin", dict(frames=4, deg=7))],
               arrive=[("push", dict(amount=0.32, T=4))], shake=14),
-    200: dict(exit=[("zoom", dict(frames=3, amount=0.10)), ("whip", dict(frames=2, angle=-65, dist=40))],
-              arrive=[("lens", dict(frames=2)), ("whip", dict(frames=2, angle=-65, dist=30))], flash=0.15, shake=10),
+    200: dict(comp=dict(type="phone_wipe", pre=3, post=3, phone="phone_galaxy_s7_front", scale=1.6, lean=14),
+              shake=12),
     220: dict(exit=[("crash", dict(frames=7, amount=0.70, focus=(280, 500))),
-                    ("whip", dict(frames=5, angle=180, dist=200)), ("bright", dict(frames=6, amount=0.4))],
-              arrive=[("whip", dict(frames=5, angle=180, dist=70))], shake=10),
-    238: dict(exit=[("whip", dict(frames=5, angle=180, dist=170)), ("zoom", dict(frames=5, amount=0.30))],
+                    ("whip", dict(frames=5, angle=0, dist=200)), ("bright", dict(frames=6, amount=0.4))],
+              arrive=[("whip", dict(frames=5, angle=0, dist=70))], shake=10),
+    238: dict(exit=[("whip", dict(frames=5, angle=270, dist=170)), ("zoom", dict(frames=5, amount=0.30))],
               arrive=[("push", dict(amount=0.20, T=5))], shake=14),
     # Reference cut at 254; here on the onset at 249 so the last shot keeps 12 frames before the loop.
     250: dict(exit=[("pull", dict(frames=5, amount=0.38)), ("spin", dict(frames=5, deg=7)),
                     ("whip", dict(frames=2, angle=139, dist=50))],
               arrive=[("push", dict(amount=0.08, T=5))], shake=12),
-    # Loop seam: S14 whips out down-left, the same direction S01 whips in from at frame 0.
-    N_FRAMES: dict(exit=[("whip", dict(frames=4, angle=128, dist=170)), ("zoom", dict(frames=4, amount=0.18))]),
+    # Loop seam: the opening shot expands out of a Dynamic Island pill over the end of the outro.
+    N_FRAMES: dict(),
 }
 # The end cut and the start cut are one splice, so both ends of the edit see its exit and arrival.
 CUTS[0] = CUTS[N_FRAMES] = {**CUTS[N_FRAMES], **CUTS[0]}
