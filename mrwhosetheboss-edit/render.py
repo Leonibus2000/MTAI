@@ -26,10 +26,6 @@ FOOTAGE = os.environ.get("FOOTAGE_DIR", os.path.join(HERE, "footage"))
 rng = np.random.default_rng(11)
 
 
-def ease(t):
-    return 0.5 - 0.5 * math.cos(math.pi * min(max(t, 0), 1))
-
-
 # ---------------------------------------------------------------- subject sources
 _seg = None
 
@@ -197,7 +193,9 @@ def outline(mask, k, width=6):
 # ---------------------------------------------------------------- overlays
 STK = {k: sticker(k, 200) for k in ["phone", "phone_back", "bolt", "chip", "battery", "lens", "wifi", "cpu_badge"]}
 STRIPED = gfx.striped_phone(300)
-TITLE = gfx.text_layer([("ARUN", 1.0), ("the", 0.7), ("BOSS", 1.15)], "anton", 150, spacing=0.82)
+TITLE_TOP = gfx.text_layer([("ARUN", 1.0), ("the", 0.7)], "anton", 150, spacing=0.82)
+TITLE_BOSS = gfx.text_layer([("BOSS", 1.15)], "anton", 150, spacing=0.82)
+TITLE_SCALE = 0.82
 WATERMARK = gfx.watermark("MTD")
 
 
@@ -236,25 +234,7 @@ def front(shot, f, k, img):
     if "tilt_rect2" in o:
         draw_rect_outline(img, 300, 260, 560, 470, 6 - k * 0.2)
     if "title_text" in o:
-        p = ease(k / 14)
-        x = -360 + 330 * p
-        tl, ta = TITLE
-        tmp_l = np.zeros((W, W), np.float32)
-        a = place(tmp_l, tl, ta, x + tl.shape[1] / 2, 250, 0.82, 0)
-        if k < 18 or k % 5 == 0:  # glitch slices while sliding in, then periodic stutter
-            for _ in range(6):
-                y = rng.integers(0, W - 30)
-                hgt, sh = rng.integers(6, 30), int(rng.integers(-40, 40))
-                tmp_l[y:y + hgt] = np.roll(tmp_l[y:y + hgt], sh, axis=1)
-                a[y:y + hgt] = np.roll(a[y:y + hgt], sh, axis=1)
-        img[:] = img * (1 - a) + tmp_l * a
-    if "icons_pop" in o and k >= 16:
-        for i, (name, x, y, ang) in enumerate([("phone_back", 470, 95, 25), ("bolt", 500, 470, -10),
-                                               ("wifi", 80, 480, 0)]):
-            kk = k - 16 - i
-            if kk >= 0:
-                s = 0.55 * min(1.25, 0.3 + kk * 0.35) if kk < 3 else 0.55
-                place(img, *STK[name], x, y, s, ang + kk * 2)
+        title(shot, f, k, img)
     if "phones_fly_in" in o and f >= 116:
         kk = f - 116
         p = 1 - (1 - min(kk / 5, 1)) ** 3
@@ -280,6 +260,49 @@ def front(shot, f, k, img):
         place(img, *STK["phone_back"], 360, 430, 0.8, 70)
     if "held_phone" in o and isinstance(SRC, Placeholder):
         place(img, *STK["phone_back"], 430, 430, 0.75, -12 + 4 * math.sin(k * 0.5))
+
+
+def screen(shot, f, img):
+    """Graphics stuck to the screen rather than the scene, drawn after the camera (they ignore its zoom)."""
+    if "icons_pop" in shot["overlays"] and f >= shot["icons_at"]:
+        # stickers slam in around the frame edge, half off screen, like the reference's at 2.97 s
+        for i, (name, x, y, s, ang) in enumerate([("phone_back", 440, 24, 1.2, 25), ("bolt", 525, 470, 1.5, -10),
+                                                  ("battery", 40, 505, 1.3, 20)]):
+            kk = f - shot["icons_at"] - i
+            if kk >= 0:
+                s *= (0.4, 1.2)[kk] if kk < 2 else 1.0
+                lum, a = STK[name]
+                place(img, np.clip(lum * 1.25, 0, 1), a, x + 6 * math.sin(f * 0.9 + i), y + 5 * math.cos(f * 1.1 + i),
+                      s, ang + 3 * math.sin(f * 0.7 + i))
+
+
+def title(shot, f, k, img):
+    """'ARUN / the' on screen from the cut (flickering with the glitch frames); 'BOSS' lands with the zoom."""
+    cfg = shot["title"]
+    if k in cfg["off"]:
+        return
+    s = TITLE_SCALE
+    x0 = 12 + 0.6 * k  # the push-in moves this to the frame edge, clipping the A like the reference's "HIKARU"
+    layer = np.zeros((W, W), np.float32)
+    tl, ta = TITLE_TOP
+    a = place(layer, tl, ta, x0 + s * tl.shape[1] / 2, 46 + s * tl.shape[0] / 2, s, 0)
+    if k >= cfg["boss_at"] and k not in cfg["boss_off"]:
+        bl, ba = TITLE_BOSS
+        pop = {0: 0.75, 1: 1.08}.get(k - cfg["boss_at"], 1.0)
+        bx, by = x0 + s * bl.shape[1] / 2, 217 + s * bl.shape[0] / 2
+        a = np.maximum(a, place(layer, bl, ba, bx, by, s * pop, 0))
+    g = cfg["glitch"].get(k, 1.0 if k == cfg["boss_at"] else 0.0)
+    if g:  # sliced rows and a horizontal ghost on the lettering only
+        r = np.random.default_rng(f)
+        for _ in range(int(4 + 6 * g)):
+            y = int(r.integers(0, W - 30))
+            h, sh = int(r.integers(6, 34)), int(r.integers(-44, 44) * g)
+            layer[y:y + h] = np.roll(layer[y:y + h], sh, axis=1)
+            a[y:y + h] = np.roll(a[y:y + h], sh, axis=1)
+        if g > 0.3:
+            layer = np.maximum(layer, 0.8 * line_blur(layer, 34 * g, 0))
+            a = np.maximum(a, 0.8 * line_blur(a, 34 * g, 0))
+    img[:] = img * (1 - a) + layer
 
 
 _tear_path = None
@@ -333,6 +356,38 @@ def lens_exit(img, d):
     return img * (1 - al) + tmp
 
 
+def wipe_in(img, nxt, cover, smear, f):
+    """The next shot smears in from the right edge over `cover` of the frame, behind a ragged soft seam."""
+    edge = W * (1 - cover) + cv2.resize(np.random.default_rng(f).standard_normal((12, 1)).astype(np.float32),
+                                        (1, W), interpolation=cv2.INTER_CUBIC) * 16
+    xx = np.arange(W, dtype=np.float32)[None, :]
+    a = np.clip((xx - edge + 24) / 48, 0, 1)
+    a = a * a * (3 - 2 * a)
+    near = 0.7 * np.clip(1 - np.abs(xx - edge) / 110, 0, 1)  # the outgoing picture streaks along the seam too
+    img = img * (1 - near) + line_blur(img, smear * 0.5, 0) * near
+    return img * (1 - a) + line_blur(nxt, smear, 0) * a
+
+
+def smear(img, blur=0, echo=None, dark=1.0):
+    """Horizontal smear with an optional offset echo, for the flicker frames after a glitch cut."""
+    img = line_blur(img, blur, 0)
+    if echo:
+        off, mix = echo
+        ghost = cv2.warpAffine(img, np.float32([[1, 0, off], [0, 1, 0]]), (W, W), borderMode=cv2.BORDER_REFLECT)
+        img = (1 - mix) * img + mix * ghost
+    return img * dark
+
+
+def tone(img, g):
+    """Exposure as a curve: g < 1 darkens midtones but keeps highlights, g > 1 lifts them but keeps black."""
+    img = np.clip(img, 0, 1)
+    if g < 0.999:
+        return img ** (1 / g)
+    if g > 1.001:
+        return 1 - (1 - img) ** g
+    return img
+
+
 def glitch(img, g, f):
     """Horizontal slice offsets with a light smear; g ~ 0..1 intensity."""
     img = img.copy()
@@ -376,12 +431,17 @@ def compose(shot, src, f):
 
 def photograph(i, srcs, f):
     """Shot i at frame f through its camera: motion blur, defocus, glitch, lens wipe, exposure."""
-    img, st = camera.shoot(compose(SHOTS[i], srcs[i], f), i, f)
+    shot = SHOTS[i]
+    img, st = camera.shoot(compose(shot, srcs[i], f), i, f)
     if st["glitch"] > 0.01:
         img = glitch(img, st["glitch"], f)
     if st["lens"] > 0.01:
         img = lens_exit(img, st["lens"])
-    return img * st["gain"] + st["lift"]
+    screen(shot, f, img)
+    flicker = CUTS[shot["start"]].get("smear_in", {}).get(f - shot["start"])
+    if flicker:
+        img = smear(img, **flicker)
+    return tone(img, st["gain"]) + st["lift"]
 
 
 def render_frame(i, srcs, f):
@@ -394,6 +454,10 @@ def render_frame(i, srcs, f):
         img = 0.76 * img + 0.24 * photograph(i - 1, srcs, f)
     if f == c1 - 1 and i + 1 < len(SHOTS) and out_of.get("exit") and out_of.get("overlap", True):
         img = 0.76 * img + 0.24 * photograph(i + 1, srcs, f)
+    wipe = out_of.get("wipe")
+    if wipe and i + 1 < len(SHOTS) and f >= c1 - len(wipe["cover"]):
+        j = f - (c1 - len(wipe["cover"]))
+        img = wipe_in(img, photograph(i + 1, srcs, f), wipe["cover"][j], wipe["smear"][j], f)
     return finish(img, f)
 
 

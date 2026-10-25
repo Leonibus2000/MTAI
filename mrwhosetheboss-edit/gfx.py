@@ -118,8 +118,7 @@ def striped_phone(h=420):
 
 
 def text_layer(lines, fontname, size, spacing=0.9, fill=1.0, stroke=0):
-    f = font(fontname, size)
-    widths = [f.getbbox(t)[2] for t, _ in lines]
+    widths = [font(fontname, int(size * scale)).getbbox(t)[2] for t, scale in lines]
     H = int(size * spacing * len(lines) + size)
     Wd = max(widths) + 40
     img = Image.new("L", (Wd, H), 0)

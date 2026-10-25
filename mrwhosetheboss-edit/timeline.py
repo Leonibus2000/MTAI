@@ -12,7 +12,9 @@ SIZE = 576
 
 # cam: push = log-zoom per frame (0.017 ~ +1.7 %/frame), spin = deg/frame, rot0 = starting tilt,
 #      pan = px/frame drift, shake = base jitter px, exposure = gain or (start, end) ramp,
-#      punch = in-shot zoom punches (frame in shot, frames in, log-zoom, frames back)
+#      zoom_to = push into a point of the shot and stay (frame in shot, frames, log-zoom, (x, y)),
+#      jolt = a fast out-and-back camera move inside the shot (frame in shot, frames, dx, dy)
+#      exposure is a tone curve: < 1 darkens midtones but keeps highlights, > 1 lifts them
 # cutout: "person" (portrait matte) or "held" (person plus the devices in his hands)
 SHOTS = [
     dict(id="S01", start=0, framing="cu", need="Close-up, intense stare straight into lens (studio intro)",
@@ -31,11 +33,15 @@ SHOTS = [
     dict(id="S04", start=55, framing="mcu", need="Thinking pose, hand on chin, looking off-camera",
          ref="Hikaru with glasses, hand on chin, diagonal stripe bg",
          look=dict(poster=4, halftone=0.25), bg="stripes", overlays=[], cutout="person",
-         cam=dict(push=0.004, rot0=1, spin=-0.3, shake=1.5, exposure=(0.8, 0.62))),
-    dict(id="S05", start=73, framing="mcu", need="Hand over mouth / leaning in, mid close-up",
-         ref="Hikaru hand over mouth; 'HIKARU the GREAT' glitch text slides in; icons pop at f89",
+         cam=dict(push=0.004, rot0=1, spin=-0.3, shake=1.5, exposure=(0.7, 0.5))),
+    dict(id="S05", start=70, framing="mcu", need="Hand over mouth / leaning in, mid close-up",
+         ref="Hikaru hand over mouth; glitch cut in, 'HIKARU the' flickers on, 'GREAT' lands f80; icons pop at f89",
          look=dict(poster=4, halftone=0.3), bg="circuit", overlays=["title_text", "icons_pop"], cutout="person",
-         cam=dict(push=0.006, spin=-0.5, shake=1.5, exposure=(0.62, 1.1), punch=[(5, 4, 0.26, 1)])),
+         cam=dict(push=0.004, spin=-0.4, shake=1.5, exposure=(0.7, 0.9), zoom_to=[(8, 5, 0.24, (20, 150))],
+                  jolt=[(12.6, 2, 55, -25)]),
+         # title flicker copied from the reference: on/off per frame, BOSS arrives with the zoom
+         title=dict(off=(1, 3), glitch={0: 0.5, 2: 0.6, 4: 1.0, 5: 0.4, 18: 0.7}, boss_at=10, boss_off=(11,)),
+         icons_at=89),
     dict(id="S06", start=101, framing=None, need=None,
          ref="Dark bg, floating stickers (rocket, bolt, stopwatch); two hands fly in at f116",
          look=dict(poster=0, halftone=0.0), bg="dark", overlays=["icon_field", "phones_fly_in"],
@@ -44,7 +50,7 @@ SHOTS = [
          ref="Hikaru looking down, 'MUHMA' pixel badge on gem sticker, icons orbit",
          look=dict(poster=0, halftone=0.2), bg="dark", overlays=["badge", "icon_orbit"], cutout="held",
          add=[[(432, 50), (450, 44), (576, 44), (576, 500), (436, 500), (422, 488), (420, 70)]],  # Fold in right hand
-         cam=dict(push=0.003, spin=-0.3, shake=2.0, exposure=0.85)),
+         cam=dict(push=0.003, spin=-0.3, shake=2.0, exposure=0.7)),
     dict(id="S08", start=149, framing="mcu", need="Profile / three-quarter, looking up, finger on chin",
          ref="Hikaru profile looking up, hand on chin, chessboard bg, inner hand outline",
          look=dict(poster=0, halftone=0.15), bg="circuit", overlays=[], cutout="person",
@@ -58,21 +64,21 @@ SHOTS = [
          ref="Torn-paper diagonal split with halftone; circular sticker zooms through at f196",
          look=dict(poster=4, halftone=0.55), bg="dots", overlays=["tear", "lens_zoom"], cutout="held",
          inpaint=dict(hue=(80, 112), sat=90, val=170, region=[(0, 470), (576, 430), (576, 576), (0, 576)]),
-         cam=dict(push=0.004, spin=0.25, shake=1.5, exposure=1.3)),
+         cam=dict(push=0.004, spin=0.25, shake=1.5, exposure=1.5)),
     dict(id="S11", start=200, framing="ms", need="At desk with phones / unboxing, looking at a device",
          ref="Hikaru at board; camera crash-zooms into the board f213-218",
          look=dict(poster=0, halftone=0.15), bg="phone_wall", overlays=["crash_zoom"], cutout="person",
-         cam=dict(push=0.008, spin=-0.1, pan=(-5, 0), shake=1.5, exposure=(1.0, 1.12))),
+         cam=dict(push=0.008, spin=-0.1, pan=(-5, 0), shake=1.5, exposure=(1.1, 1.25))),
     dict(id="S12", start=220, framing="ms", need="Holding a phone up to camera / comparing two phones",
          ref="Two players at angled board, white outlines",
          look=dict(poster=0, halftone=0.2), bg="app_grid", overlays=["held_phone"], cutout="held",
          add=[[(0, 80), (120, 72), (150, 80), (168, 100), (176, 140), (182, 300), (186, 576), (0, 576)]],  # Pixel 9a
          erase=[[(528, 334), (576, 330), (576, 446), (540, 446)]],  # fingers of the off-frame hand
-         cam=dict(push=0.015, rot0=-2, spin=0.45, pan=(-3, 0), shake=1.5, exposure=0.95)),
+         cam=dict(push=0.015, rot0=-2, spin=0.45, pan=(-3, 0), shake=1.5, exposure=0.85)),
     dict(id="S13", start=238, framing="cu", need="Big genuine smile / laugh, close-up",
          ref="Hikaru big smile, LED light-bar bg, outline",
          look=dict(poster=0, halftone=0.15), bg="light_bars", overlays=[], cutout="person",
-         cam=dict(push=0.003, spin=0.3, shake=1.5, exposure=1.1)),
+         cam=dict(push=0.003, spin=0.3, shake=1.5, exposure=1.2)),
     dict(id="S14", start=254, framing="ms", need="Outro: holding a product, phone wall behind",
          ref="Hikaru holding board, chess-piece backdrop, end blur",
          look=dict(poster=0, halftone=0.2), bg="phone_wall", overlays=["held_phone"], cutout="held",
@@ -94,6 +100,8 @@ for i, s in enumerate(SHOTS):
 #   zoom/pull/crash amount = log-zoom at the cut, spin deg = degrees at the cut,
 #   push = arrival zoom-in that settles (amount, time constant T), pull = starts zoomed in and backs out
 #   shake = jitter burst (px) fired at the cut, flash = white lift, overlap = 2-frame streaked blend
+#   wipe = next shot smeared in from the right before the cut (cover fraction and smear px per frame)
+#   smear_in = per-frame horizontal smear / echo / darkening of the new shot's first frames
 CUTS = {
     0: dict(arrive=[("whip", dict(frames=4, angle=128, dist=150)), ("push", dict(amount=0.03, T=5))], shake=14),
     21: dict(exit=[("zoom", dict(frames=5, amount=0.55))],
@@ -103,7 +111,10 @@ CUTS = {
              flash=0.22, shake=14),
     55: dict(exit=[("whip", dict(frames=4, angle=144, dist=150)), ("zoom", dict(frames=3, amount=0.16))],
              arrive=[("whip", dict(frames=2, angle=144, dist=50)), ("push", dict(amount=0.14, T=6))], shake=12),
-    73: dict(exit=[("glitch", dict(frames=4)), ("dip", dict(frames=4, amount=0.3))],
+    # Reference: the next shot smears in from the right over the last 3 frames, then flickers for 4.
+    70: dict(wipe=dict(cover=(0.22, 0.42, 0.64), smear=(40, 64, 90)),
+             smear_in={0: dict(blur=22, echo=(40, 0.45)), 1: dict(blur=48, echo=(56, 0.4), dark=0.72),
+                       2: dict(blur=14, echo=(26, 0.35))},
              arrive=[("push", dict(amount=0.06, T=4))], shake=10),
     101: dict(exit=[("pull", dict(frames=2, amount=0.06))],
               arrive=[("defocus", dict(frames=5, sigma=7))], overlap=False),

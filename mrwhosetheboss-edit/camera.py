@@ -102,10 +102,17 @@ def state(i, t):
         elif kind == "glitch":
             st["glitch"] = max(st["glitch"], min(u, 1.2))
 
-    for kk, frames, amount, back in cam.get("punch", []):  # in-shot zoom punch that snaps back
-        if kk <= k < kk + frames + back:
-            q = (k - kk) / frames
-            st["logz"] += amount * (q * q if q <= 1 else max(0.0, 1 - (k - kk - frames) / back))
+    for kk, frames, amount, focus in cam.get("zoom_to", []):  # push into a point of the shot and stay
+        if k > kk:
+            q = min((k - kk) / frames, 1.0)
+            st["crash"] += amount * q * q
+            st["crash_focus"] = focus
+
+    for kk, frames, dx, dy in cam.get("jolt", []):  # out and back: heavy streaks both ways, then sharp
+        if kk < k < kk + frames:
+            b = math.sin(math.pi * (k - kk) / frames)
+            st["tx"] += dx * b
+            st["ty"] += dy * b
 
     amp = cam.get("shake", 1.5) + _decay(t, CUT_SHAKE, 3.0) + cam.get("beat", 6.5) * _decay(t, BEATS, 2.5)
     j = _jitter(t)
