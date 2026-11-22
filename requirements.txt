@@ -1,0 +1,7 @@
+# MTAI from source: Python 3.10+ on Windows 10/11
+pywebview>=5.0      # the app window (WebView2)
+psutil>=5.9         # privacy mode: process and connection watcher
+
+# optional
+anthropic>=2.8    # Claude models with your own API key
+requests>=2.31      # used by the privacy self-test

@@ -1,0 +1,24 @@
+# user data: chats, settings, API keys, images, workspaces, test reports
+data/
+extra_model_folders.json
+
+# image engine and models (downloaded by MTAI)
+engine/
+image-models/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# PyInstaller output
+build/
+dist/
+
+# editors and OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini

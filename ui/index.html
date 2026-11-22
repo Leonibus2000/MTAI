@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="token" content="{{TOKEN}}">
+<title>MTAI</title>
+<link rel="stylesheet" href="style.css">
+<script>
+/* paint the boot splash in the saved theme colors before anything else loads */
+(() => { try {
+  const t = JSON.parse(localStorage.getItem('mtai-theme') || 'null'), r = document.documentElement;
+  if (!t) return;
+  for (const k of ['accent', 'accent2', 'bg']) if (/^#[0-9a-f]{6}$/i.test(t[k] || '')) r.style.setProperty('--' + k, t[k]);
+  r.dataset.anim = typeof t.anim === 'string' ? t.anim : t.anim === false ? 'none' : 'medium';
+} catch (e) {} })();
+</script>
+</head>
+<body>
+<div id="boot" class="boot" aria-hidden="true">
+  <div class="boot-core">
+    <div class="boot-logo"><i class="bl-ring"></i><i class="bl-mark"></i></div>
+    <div class="boot-name">MTAI</div>
+    <div class="boot-bar"><i id="bootFill"></i></div>
+    <div class="boot-step" id="bootStep">Starting</div>
+  </div>
+</div>
+<script>
+/* boot splash: app.js init() calls mtaiBoot.step() while it loads and mtaiBoot.done() at the end */
+(() => {
+  const el = document.getElementById('boot'), fill = document.getElementById('bootFill'), st = document.getElementById('bootStep');
+  const t0 = performance.now();
+  let gone = false;
+  window.mtaiBoot = {
+    step(text, p) { if (gone) return; st.textContent = text; if (p != null) fill.style.width = Math.round(p * 100) + '%'; },
+    done() {
+      if (gone) return;
+      gone = true; fill.style.width = '100%';
+      const lv = document.body.dataset.anim || document.documentElement.dataset.anim || 'medium';
+      const min = lv === 'none' ? 0 : lv === 'reduced' ? 200 : 650;      // long enough to be seen, never a flash
+      setTimeout(() => {
+        el.classList.add('out');
+        dispatchEvent(new Event('mtai:ready'));
+        setTimeout(() => el.remove(), lv === 'none' ? 0 : 700);
+      }, Math.max(0, min - (performance.now() - t0)));
+    },
+  };
+  setTimeout(() => window.mtaiBoot.done(), 12000);                       // never stay stuck on the splash
+})();
+</script>
+<div class="bg" aria-hidden="true"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
+
+<div id="app" class="app">
+  <aside id="sidebar" class="sidebar glass">
+    <div class="side-head">
+      <div class="brand"><span class="logo"></span><span>MTAI</span></div>
+      <button class="icon-btn" id="hideSideBtn" title="Hide sidebar (Ctrl+B)" data-icon="sidebar"></button>
+    </div>
+    <button class="new-chat" id="newChatBtn" data-icon="plus"><span>New chat</span><kbd>Ctrl N</kbd></button>
+    <label class="search" data-icon="search" data-size="15"><input id="chatSearch" placeholder="Search chats" spellcheck="false"></label>
+    <div id="chatList" class="chat-list"></div>
+    <div class="side-foot">
+      <button class="status-pill" id="statusPill" title="Servers"><i class="dot"></i><span id="statusText">Scanning…</span></button>
+      <button class="icon-btn" id="keysBtn" title="Shortcuts (Ctrl+/)" data-icon="keyboard"></button>
+      <button class="icon-btn" id="modelsBtn" title="Models" data-icon="cube"></button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn" id="showSideBtn" title="Show sidebar (Ctrl+B)" data-icon="sidebar"></button>
+      <button id="modelPill" class="model-pill" title="Switch model (Ctrl+K)">
+        <i class="dot"></i><span id="modelName">Choose a model</span><span id="modelCaps" class="pill-caps"></span><span class="chev" data-icon="chev" data-size="15"></span>
+      </button>
+      <div class="spacer"></div>
+      <button id="privChip" class="chip priv-chip" title="Privacy mode: block everything that uses the internet"><span class="pc-shield"></span><span class="pc-label">Private</span></button>
+      <button id="codeChip" class="chip" title="Code mode: the AI gets its own project folder and edits the files there" data-icon="code" data-size="15"><span>Code</span></button>
+      <button class="icon-btn" id="wsBtn" title="Workspace: watch the AI code" data-icon="folder" hidden></button>
+      <button id="thinkChip" class="chip" title="Let the model think before it answers" data-icon="brain" data-size="15"><span>Think</span></button>
+      <button id="planChip" class="chip" title="Planning: the AI writes a plan you can edit before it answers (Ctrl+J)" data-icon="plan" data-size="15"><span>Plan</span></button>
+      <button class="icon-btn" id="playBtn" title="Play: games and toys (Ctrl+G)" data-icon="game"></button>
+      <button class="icon-btn" id="exportBtn" title="Export chat" data-icon="download"></button>
+      <button class="icon-btn" id="themeBtn" title="Appearance" data-icon="palette"></button>
+      <button class="icon-btn" id="settingsBtn" title="Chat settings (Ctrl+,)" data-icon="sliders"></button>
+    </header>
+
+    <section id="scroller" class="scroller"><div id="thread" class="thread"></div></section>
+    <button id="toBottom" class="to-bottom" title="Scroll to bottom" data-icon="down"></button>
+
+    <footer class="composer-wrap" id="composerWrap">
+      <div id="composer" class="composer">
+        <div id="slash" class="slash" hidden></div>
+        <div id="attachments" class="attachments"></div>
+        <div id="imgBar" class="img-bar" hidden></div>
+        <textarea id="input" rows="1" placeholder="Message…" spellcheck="true"></textarea>
+        <div class="composer-bar">
+          <button class="icon-btn" id="attachBtn" title="Attach images or code files" data-icon="clip"></button>
+          <button class="icon-btn" id="promptBtn" title="Prompt commands ( / )" data-icon="wand"></button>
+          <button class="tool-chip" id="webBtn" title="Search the web before answering" data-icon="globe" data-size="15"><span>Search</span></button>
+          <button class="tool-chip" id="deepBtn" title="Deep research: the AI browses several pages and you watch its browser" data-icon="telescope" data-size="15"><span>Deep research</span></button>
+          <button class="tool-chip" id="imgBtn" title="Image mode: your message becomes a picture (Ctrl+I)" data-icon="image" data-size="15"><span>Image</span></button>
+          <input type="file" id="fileInput" multiple hidden>
+          <span class="hint" id="hint"><kbd>/</kbd> commands <kbd>Shift Enter</kbd> new line</span>
+          <span class="ctx" id="ctxMeter" hidden><i class="ctx-ring"></i><span></span></span>
+          <button id="sendBtn" class="send-btn" title="Send"><span class="s-send" data-icon="up"></span><span class="s-stop"></span></button>
+        </div>
+      </div>
+      <div class="footnote" id="footnote">Local models run on this PC. Chats stay on this PC.</div>
+    </footer>
+    <div id="dropZone" class="drop-zone"><div data-icon="clip" data-size="34"><span>Drop images or code files</span></div></div>
+  </main>
+
+  <aside id="panel" class="panel" hidden>
+    <div class="pv-resize" id="pvResize" title="Drag to resize"></div>
+    <div class="pv-head">
+      <div class="pv-title"><span class="pv-dot"></span><span id="pvTitle">Preview</span><em id="pvEdited" hidden>edited</em></div>
+      <div class="seg pv-tabs">
+        <button data-pvtab="preview" data-icon="eye" data-size="14"><span>Preview</span></button>
+        <button data-pvtab="code" data-icon="code" data-size="14"><span>Code</span></button>
+        <button data-pvtab="console" data-icon="terminal" data-size="14"><span>Console</span><em id="pvCount"></em><i id="pvFixDot" class="fix-dot" hidden></i></button>
+      </div>
+      <button class="icon-btn" data-pv="close" title="Close (Ctrl+P)" data-icon="x"></button>
+    </div>
+    <div class="pv-tools">
+      <div class="pv-devices">
+        <button data-device="desktop" title="Desktop" data-icon="monitor" data-size="16"></button>
+        <button data-device="tablet" title="Tablet (820 px)" data-icon="tablet" data-size="16"></button>
+        <button data-device="phone" title="Phone (390 px)" data-icon="phone" data-size="16"></button>
+      </div>
+      <div class="pv-url" id="pvUrl"></div>
+      <button class="icon-btn" data-pv="reload" title="Reload" data-icon="refresh" data-size="16"></button>
+      <button class="icon-btn" data-pv="revert" title="Undo my edits" data-icon="undo" data-size="16"></button>
+      <button class="icon-btn" data-pv="folder" title="Open the workspace folder" data-icon="folder" data-size="16"></button>
+      <button class="icon-btn" data-pv="open" title="Open in browser" data-icon="ext" data-size="16"></button>
+      <button class="icon-btn" data-pv="save" title="Save as file" data-icon="download" data-size="16"></button>
+    </div>
+    <div class="pv-body">
+      <div class="pv-stage" id="pvStage"><div class="pv-device" id="pvDevice">
+        <iframe id="pvFrame" title="Preview" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-pointer-lock allow-downloads"></iframe>
+      </div></div>
+      <textarea id="pvCode" class="pv-code" spellcheck="false" hidden></textarea>
+      <div id="pvConsole" class="pv-console" hidden></div>
+      <div id="wsView" class="ws-view" hidden>
+        <nav id="wsTree" class="ws-tree"></nav>
+        <div id="wsCode" class="ws-code"></div>
+      </div>
+      <div id="webView" class="web-view" hidden>
+        <div id="webTabs" class="web-tabs"></div>
+        <div class="web-page">
+          <iframe id="webFrame" title="Browser" sandbox="allow-scripts"></iframe>
+          <div id="webEmpty" class="web-empty"><span class="spin"></span>Starting the browser…</div>
+          <div id="webScan" class="web-scan"></div>
+          <div id="webStatus" class="web-status" hidden></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div id="picker" class="popover" hidden>
+  <label class="pk-search" data-icon="search" data-size="15"><input id="pkSearch" placeholder="Search models" spellcheck="false"></label>
+  <div id="pkList" class="pk-list"></div>
+  <div class="pk-foot">
+    <button class="btn ghost small" data-act="refresh" data-icon="refresh" data-size="14"><span>Refresh</span></button>
+    <button class="btn ghost small" data-act="manage" data-icon="cube" data-size="14"><span>Manage models</span></button>
+  </div>
+</div>
+
+<aside id="drawer" class="drawer">
+  <div class="drawer-head"><div class="seg drawer-tabs"><button data-dtab="chat">Chat</button><button data-dtab="style">Style</button><button data-dtab="look">Appearance</button></div><button class="icon-btn" data-act="close-drawer" data-icon="x"></button></div>
+  <div id="drawerBody" class="drawer-body"></div>
+</aside>
+
+<div id="modal" class="modal-back" hidden>
+  <div class="modal">
+    <nav class="m-nav">
+      <div class="m-title">Models</div>
+      <button data-tab="installed" data-icon="cube"><span>Installed</span><em id="cntInstalled"></em></button>
+      <button data-tab="cloud" data-icon="key"><span>Cloud &amp; API keys</span><em id="cntCloud"></em></button>
+      <button data-tab="images" data-icon="image"><span>Images</span><em id="cntImages"></em></button>
+      <button data-tab="download" data-icon="download"><span>Download</span><em id="cntPulls"></em></button>
+      <button data-tab="servers" data-icon="server"><span>Servers</span><em id="cntServers"></em></button>
+      <button data-tab="files" data-icon="file"><span>GGUF files</span><em id="cntFiles"></em></button>
+      <div class="spacer"></div>
+      <button class="m-close" data-act="close-modal" data-icon="x"><span>Close</span></button>
+    </nav>
+    <div id="modalBody" class="m-body"></div>
+  </div>
+</div>
+
+<div id="dialog" class="modal-back dialog-back" hidden></div>
+<div id="toasts" class="toasts"></div>
+
+<script src="tools.js"></script>
+<script src="privacy.js"></script>
+<script src="app.js"></script>
+<script src="extras.js"></script>
+<script src="welcome.js"></script>
+<script src="motion.js"></script>
+</body>
+</html>
